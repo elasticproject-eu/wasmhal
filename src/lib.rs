@@ -41,8 +41,11 @@ pub use communication::{CommunicationInterface, CommBufferHandle, BufferConfig, 
 
 /// HAL version information
 pub const HAL_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const HAL_NAME: &str = "ELASTIC TEE HAL";
 
-// WIT interface implementations
+// WIT interface implementations - these will be populated by wit_bindgen
+// when the macro is enabled
+/*
 pub struct Platform;
 pub struct Capabilities;
 pub struct Crypto;
@@ -52,7 +55,9 @@ pub struct Gpu;
 pub struct Resources;
 pub struct Events;
 pub struct Communication;
-pub const HAL_NAME: &str = "ELASTIC TEE HAL";
+pub struct Clock;
+pub struct Random;
+*/
 
 #[cfg(test)]
 mod tests {
