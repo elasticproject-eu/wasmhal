@@ -9,7 +9,7 @@
 
 ## Overview
 
-The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interface for Trusted Execution Environment (TEE) workloads to interact with platform-specific hardware features while maintaining portability across different TEE implementations. Built for confidential computing applications, it offers WASI 0.2 compliance and supports AMD SEV-SNP and Intel TDX platforms.
+The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interface for Trusted Execution Environment (TEE) workloads to interact with platform-specific hardware features while maintaining portability across different TEE implementations. Built for confidential computing applications, it offers WASI 0.2 compliance and supports AMD SEV-SNP and Intel TDX (incomplete) platforms.
 
 ## 🚀 Features
 
