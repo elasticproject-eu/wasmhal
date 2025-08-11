@@ -1,0 +1,65 @@
+# Rust build artifacts
+/target/
+Cargo.lock
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# Documentation build
+/book/
+/mdbook/
+
+# Local development files
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+tmp/
+temp/
+
+# Project-specific exclusions
+.prompt/
+.docs/
+*.prompt
+prompt.*
+
+# TEE-specific files (may contain sensitive data)
+*.attestation
+*.measurement
+*.key
+secrets/
+
+# Test artifacts
+test-results/
+*.prof
+
+# Backup files
+*.bak
+*.backup
