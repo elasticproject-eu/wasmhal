@@ -5,6 +5,13 @@
 /// with platform-specific hardware features while maintaining portability across
 /// different TEE implementations (AMD SEV-SNP, Intel TDX, ARM TrustZone, etc.)
 
+// WIT bindgen configuration - enable when WIT dependencies are fully resolved
+// For now, the WIT definitions are available in ./wit/world.wit
+// wit_bindgen::generate!({
+//     world: "elastic-tee-hal",
+//     path: "wit"
+// });
+
 pub mod error;
 pub mod platform;
 pub mod capabilities;
@@ -34,6 +41,17 @@ pub use communication::{CommunicationInterface, CommBufferHandle, BufferConfig, 
 
 /// HAL version information
 pub const HAL_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// WIT interface implementations
+pub struct Platform;
+pub struct Capabilities;
+pub struct Crypto;
+pub struct Storage;
+pub struct Sockets;
+pub struct Gpu;
+pub struct Resources;
+pub struct Events;
+pub struct Communication;
 pub const HAL_NAME: &str = "ELASTIC TEE HAL";
 
 #[cfg(test)]

@@ -11,7 +11,8 @@ repository = "https://github.com/syafiq/wasmhal"
 # WASI and WebAssembly Component Model
 wasi = "0.13"
 wit-bindgen = "0.30"
-wasmtime = { version = "25", features = ["component-model"] }
+wasmtime = { version = "25", features = ["component-model"], optional = true }
+cargo-component = { version = "0.13", optional = true }
 
 # Async runtime and networking
 tokio = { version = "1.0", features = ["full"] }
@@ -54,6 +55,12 @@ getrandom = { version = "0.2", features = ["std"] }
 default = ["amd-sev"]
 amd-sev = []
 gpu = ["wgpu"]
+component = ["wasmtime", "cargo-component"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
+
+[package.metadata.component]
+package = "elastic:tee-hal"
+
+[package.metadata.component.dependencies]
