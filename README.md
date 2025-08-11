@@ -38,7 +38,7 @@ The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interf
 ### Platform Support
 
 - **AMD SEV-SNP** - Secure Nested Paging with guest attestation
-- **Intel TDX** - Trust Domain Extensions with measurement and attestation
+- **Intel TDX** - Trust Domain Extensions with measurement and attestation (Incomplete)
 - **ARM TrustZone** - Future support planned
 - **Generic TEE** - Fallback implementation for other platforms
 
@@ -46,7 +46,7 @@ The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interf
 
 - **Rust 2021 Edition** or later
 - **WASI 0.2** compatible runtime (Wasmtime recommended)
-- **TEE Platform** - AMD SEV-SNP or Intel TDX
+- **TEE Platform** - AMD SEV-SNP
 - **GPU** (optional) - For compute acceleration features
 
 ## 🛠️ Installation
@@ -415,10 +415,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Documentation**: [docs.rs/elastic-tee-hal](https://docs.rs/elastic-tee-hal)
 - **Issues**: [GitHub Issues](https://github.com/syafiq/wasmhal/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/syafiq/wasmhal/discussions)
-- **Security**: security@elastic-consortium.org
 
 ---
 
