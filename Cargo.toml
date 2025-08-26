@@ -51,6 +51,9 @@ env_logger = "0.11"
 # Random number generation
 getrandom = { version = "0.2", features = ["std"] }
 
+# Hex encoding for demo
+hex = "0.4"
+
 [features]
 default = ["amd-sev"]
 amd-sev = []
