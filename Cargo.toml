@@ -60,6 +60,9 @@ component = ["wasmtime", "cargo-component"]
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[dev-dependencies]
+tempfile = "3.21.0"
+
 [package.metadata.component]
 package = "elastic:tee-hal"
 

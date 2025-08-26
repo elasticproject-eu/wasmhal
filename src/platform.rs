@@ -24,6 +24,9 @@ pub enum PlatformType {
 impl ElasticTeeHal {
     /// Create a new HAL instance with platform auto-detection
     pub fn new() -> HalResult<Self> {
+        // Initialize the crypto provider for Rustls
+        Self::init_crypto_provider()?;
+        
         let platform_type = Self::detect_platform()?;
         let capabilities = Arc::new(RwLock::new(PlatformCapabilities::new(platform_type.clone())));
         
@@ -39,6 +42,9 @@ impl ElasticTeeHal {
 
     /// Create a HAL instance for a specific platform type
     pub fn with_platform(platform_type: PlatformType) -> HalResult<Self> {
+        // Initialize the crypto provider for Rustls
+        Self::init_crypto_provider()?;
+        
         let capabilities = Arc::new(RwLock::new(PlatformCapabilities::new(platform_type.clone())));
         
         let mut hal = Self {
@@ -60,6 +66,19 @@ impl ElasticTeeHal {
         
         self.initialized = true;
         log::info!("ELASTIC TEE HAL initialized for platform: {:?}", self.platform_type);
+        Ok(())
+    }
+
+    /// Initialize the crypto provider for Rustls
+    fn init_crypto_provider() -> HalResult<()> {
+        use std::sync::Once;
+        static INIT: Once = Once::new();
+        
+        INIT.call_once(|| {
+            // Install the ring crypto provider for Rustls
+            let _ = rustls::crypto::ring::default_provider().install_default();
+        });
+        
         Ok(())
     }
 
@@ -90,12 +109,38 @@ impl ElasticTeeHal {
         
         #[cfg(target_arch = "x86_64")]
         {
-            // Simple check for demonstration - in production this would be more comprehensive
-            std::path::Path::new("/dev/sev").exists() || 
-            std::path::Path::new("/sys/firmware/efi/efivars/SecureBoot-*").exists()
+            // Check for AMD CPU vendor
+            let is_amd = Self::is_amd_cpu();
+            
+            // Check for SEV guest device (SNP environments)
+            let has_sev_guest = std::path::Path::new("/dev/sev-guest").exists();
+            
+            // Check for SEV device (host environments)
+            let has_sev_dev = std::path::Path::new("/dev/sev").exists();
+            
+            // Check for TSM support (Trust Security Module for attestation)
+            let has_tsm = std::path::Path::new("/sys/kernel/config/tsm/report").exists();
+            
+            println!("AMD SEV Detection:");
+            println!("  - AMD CPU: {}", is_amd);
+            println!("  - /dev/sev-guest: {}", has_sev_guest);
+            println!("  - /dev/sev: {}", has_sev_dev);
+            println!("  - TSM support: {}", has_tsm);
+            
+            is_amd && (has_sev_guest || has_sev_dev) && has_tsm
         }
         #[cfg(not(target_arch = "x86_64"))]
         false
+    }
+    
+    /// Check if this is an AMD CPU
+    fn is_amd_cpu() -> bool {
+        // Read /proc/cpuinfo to check vendor
+        if let Ok(content) = std::fs::read_to_string("/proc/cpuinfo") {
+            content.contains("vendor_id\t: AuthenticAMD")
+        } else {
+            false
+        }
     }
 
     /// Check if Intel TDX is available
