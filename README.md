@@ -37,8 +37,8 @@ The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interf
 
 ### Platform Support
 
-- **AMD SEV-SNP** - Secure Nested Paging with guest attestation
-- **Intel TDX** - Trust Domain Extensions with measurement and attestation (Incomplete)
+- **AMD SEV-SNP** - Secure Nested Paging with guest attestation ✅ **Fully Implemented**
+- **Intel TDX** - Trust Domain Extensions with measurement and attestation 🏗️ **Architectural Support** (Implementation in progress)
 - **ARM TrustZone** - Future support planned
 - **Generic TEE** - Fallback implementation for other platforms
 
@@ -278,7 +278,7 @@ async fn gpu_example() -> HalResult<()> {
          │                       │                       │
   ┌─────────────┐       ┌──────────────┐       ┌─────────────┐
   │  AMD SEV-SNP│       │  Intel TDX   │       │  ARM TZ     │
-  │   Platform  │       │   Platform   │       │  (Future)   │
+  │  ✅ Working │       │ 🏗️ Planned   │       │  (Future)   │
   └─────────────┘       └──────────────┘       └─────────────┘
 ```
 
