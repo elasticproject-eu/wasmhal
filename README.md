@@ -5,6 +5,7 @@
 [![Rust](https://img.shields.io/badge/rust-2021-orange.svg)](https://www.rust-lang.org)
 [![WASI](https://img.shields.io/badge/WASI-0.2-blue.svg)](https://wasi.dev)
 [![TEE](https://img.shields.io/badge/TEE-AMD%20SEV--SNP-green.svg)](https://www.amd.com/en/developer/sev.html)
+[![TDX](https://img.shields.io/badge/Intel%20TDX-Planned-yellow.svg)](https://www.intel.com/content/www/us/en/developer/tools/trust-domain-extensions/overview.html)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## Overview
@@ -46,7 +47,7 @@ The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interf
 
 - **Rust 2021 Edition** or later
 - **WASI 0.2** compatible runtime (Wasmtime recommended)
-- **TEE Platform** - AMD SEV-SNP
+- **TEE Platform** - AMD SEV-SNP (Intel TDX support in development)
 - **GPU** (optional) - For compute acceleration features
 
 ## 🛠️ Installation
