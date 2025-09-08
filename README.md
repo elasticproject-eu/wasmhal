@@ -12,21 +12,21 @@
 
 The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interface for Trusted Execution Environment (TEE) workloads to interact with platform-specific hardware features while maintaining portability across different TEE implementations. Built for confidential computing applications, it offers WASI 0.2 compliance and supports AMD SEV-SNP and Intel TDX (incomplete) platforms.
 
-## 🚀 Features
+## Features
 
 ### Core Interfaces
 
-- **🌐 Network Communication** - TCP/UDP sockets with TLS/DTLS support
-- **🔐 Cryptographic Operations** - Symmetric/asymmetric crypto, signing, platform attestation
-- **⚡ GPU Compute Interface** - Hardware-accelerated compute pipelines
-- **🎲 Secure Random Generation** - Cryptographically secure RNG with hardware entropy
-- **⏰ Time Operations** - System time and monotonic clocks with TEE-aware timekeeping
-- **💾 Encrypted Object Storage** - Container-based storage with AES-GCM encryption
-- **📊 Resource Management** - Dynamic memory, CPU, and resource allocation tracking
-- **📡 Event Handling** - Priority-based inter-workload event communication
-- **🔗 Protected Communication** - Secure Wasm-to-Wasm message passing
-- **🔍 Platform Capabilities** - Runtime feature discovery and platform limits
-- **🏗️ Platform Detection** - Automatic TEE platform identification and initialization
+- **Network Communication** - TCP/UDP sockets with TLS/DTLS support
+- **Cryptographic Operations** - Symmetric/asymmetric crypto, signing, platform attestation
+- **GPU Compute Interface** - Hardware-accelerated compute pipelines
+- **Secure Random Generation** - Cryptographically secure RNG with hardware entropy
+- **Time Operations** - System time and monotonic clocks with TEE-aware timekeeping
+- **Encrypted Object Storage** - Container-based storage with AES-GCM encryption
+- **Resource Management** - Dynamic memory, CPU, and resource allocation tracking
+- **Event Handling** - Priority-based inter-workload event communication
+- **Protected Communication** - Secure Wasm-to-Wasm message passing
+- **Platform Capabilities** - Runtime feature discovery and platform limits
+- **Platform Detection** - Automatic TEE platform identification and initialization
 
 ### Security Features
 
@@ -43,14 +43,14 @@ The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interf
 - **ARM TrustZone** - Future support planned
 - **Generic TEE** - Fallback implementation for other platforms
 
-## 📋 Requirements
+## Requirements
 
 - **Rust 2021 Edition** or later
 - **WASI 0.2** compatible runtime (Wasmtime recommended)
 - **TEE Platform** - AMD SEV-SNP (Intel TDX support in development)
 - **GPU** (optional) - For compute acceleration features
 
-## 🛠️ Installation
+## Installation
 
 Add to your `Cargo.toml`:
 
@@ -59,7 +59,7 @@ Add to your `Cargo.toml`:
 elastic-tee-hal = "0.1.0"
 ```
 
-## 🔧 Quick Start
+## Quick Start
 
 ### Basic HAL Initialization
 
@@ -248,7 +248,7 @@ async fn gpu_example() -> HalResult<()> {
 }
 ```
 
-## 🏗️ Architecture
+## Architecture
 
 ### Interface Modules
 
@@ -299,7 +299,7 @@ match some_hal_operation().await {
 }
 ```
 
-## 🧪 Testing
+## Testing
 
 Run the comprehensive test suite:
 
@@ -319,7 +319,7 @@ cargo test communication::tests
 cargo test --features gpu
 ```
 
-## 🏆 Performance
+## Performance
 
 The HAL is designed for high-performance confidential computing:
 
@@ -329,7 +329,7 @@ The HAL is designed for high-performance confidential computing:
 - **Memory pool management** for reduced allocation overhead
 - **Efficient serialization** with bincode for inter-workload communication
 
-## 🔒 Security Considerations
+## Security Considerations
 
 ### Platform Attestation
 - All cryptographic operations can include platform measurements
@@ -346,7 +346,7 @@ The HAL is designed for high-performance confidential computing:
 - Certificate pinning and validation
 - Perfect forward secrecy for all connections
 
-## 📚 API Documentation
+## API Documentation
 
 ### Core Interfaces
 
@@ -378,7 +378,7 @@ pub struct PlatformCapabilities {
 }
 ```
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
@@ -403,22 +403,22 @@ cargo fmt
 cargo clippy
 ```
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **ELASTIC Consortium** - For confidential computing research and development
 - **WASI Community** - For WebAssembly System Interface specifications
 - **AMD and Intel** - For TEE platform documentation and support
 - **Rust Community** - For excellent async and cryptographic libraries
 
-## 📞 Support
+## Support
 
 - **Issues**: [GitHub Issues](https://github.com/syafiq/wasmhal/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/syafiq/wasmhal/discussions)
 
 ---
 
-**Built with ❤️ for Confidential Computing and Trusted Execution Environments**
+**Built for Confidential Computing and Trusted Execution Environments**
