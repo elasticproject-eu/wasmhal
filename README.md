@@ -263,16 +263,22 @@ async fn gpu_example() -> HalResult<()> {
 │                    ELASTIC TEE HAL                             │
 │                                                                 │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐ │
-│  │   Crypto    │ │   Storage   │ │   Network   │ │   Clock   │ │
+│  │   Crypto    │ │** Storage **│ │** Network **│ │** Clock **│ │
+│  │             │ │ (WASI I/O)  │ │ (WASI)      │ │ (WASI)    │ │
 │  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘ │
 │                                                                 │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐ │
-│  │     GPU     │ │  Resources  │ │   Events    │ │  Random   │ │
+│  │     GPU     │ │  Resources  │ │    Events   │ │** Random**│ │
+│  │             │ │             │ │             │ │ (WASI)    │ │
 │  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘ │
 │                                                                 │
 │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐               │
-│  │    Comm     │ │  Platform   │ │ Capabilities│               │
+│  │    Comm     │ │  Platform   │ │Capabilities │               │
+│  │             │ │             │ │             │               │
 │  └─────────────┘ └─────────────┘ └─────────────┘               │
+│                                                                 │
+│  ** Bold ** = WASI 0.2 Standard Interfaces                     │
+│  Clock, Random, Network, Storage I/O                           │
 └─────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
