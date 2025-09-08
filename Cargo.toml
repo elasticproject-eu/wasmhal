@@ -1,0 +1,72 @@
+[package]
+name = "elastic-tee-hal"
+version = "0.1.0"
+edition = "2021"
+authors = ["ELASTIC Consortium"]
+description = "Hardware Abstraction Layer for Trusted Execution Environments in confidential computing"
+license = "MIT"
+repository = "https://github.com/syafiq/wasmhal"
+
+[dependencies]
+# WASI and WebAssembly Component Model
+wasi = "0.13"
+wit-bindgen = "0.30"
+wasmtime = { version = "25", features = ["component-model"], optional = true }
+cargo-component = { version = "0.13", optional = true }
+
+# Async runtime and networking
+tokio = { version = "1.0", features = ["full"] }
+tokio-rustls = "0.26"
+rustls = { version = "0.23", features = ["ring"] }
+webpki-roots = "0.26"
+
+# Cryptography
+ring = "0.17"
+aes-gcm = "0.10"
+chacha20poly1305 = "0.10"
+x25519-dalek = "2.0"
+ed25519-dalek = "2.1"
+sha2 = "0.10"
+hmac = "0.12"
+
+# Storage and serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bincode = "1.3"
+
+# Platform-specific
+libc = "0.2"
+
+# GPU (placeholder for future GPU support)
+wgpu = { version = "0.20", optional = true }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Random number generation
+getrandom = { version = "0.2", features = ["std"] }
+
+# Hex encoding for demo
+hex = "0.4"
+
+[features]
+default = ["amd-sev"]
+amd-sev = []
+gpu = ["wgpu"]
+component = ["wasmtime", "cargo-component"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dev-dependencies]
+tempfile = "3.21.0"
+
+[package.metadata.component]
+package = "elastic:tee-hal"
+
+[package.metadata.component.dependencies]
