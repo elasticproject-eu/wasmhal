@@ -553,10 +553,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- **ELASTIC Consortium** - For confidential computing research and development
-- **WASI Community** - For WebAssembly System Interface specifications
-- **AMD and Intel** - For TEE platform documentation and support
-- **Rust Community** - For excellent async and cryptographic libraries
+This work has been partially supported by the ELASTIC project, which received funding from the Smart Networks and Services Joint Undertaking (SNS JU) under the European Union’s Horizon Europe research and innovation programme under Grant Agreement No. 101139067. Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union. Neither the European Union nor the granting authority can be held responsible for them.
 
 ## Support
 
