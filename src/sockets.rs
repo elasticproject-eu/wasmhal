@@ -1,4 +1,7 @@
 // Socket interface implementation - Requirement 1
+// WASI-compatible network interface using tokio for async TCP/UDP/TLS operations
+// Works in TEE environments including Intel TDX with virtio-net or SR-IOV networking
+// TDX provides network isolation and encryption for data in transit via TLS
 
 use crate::error::{HalError, HalResult};
 use std::collections::HashMap;

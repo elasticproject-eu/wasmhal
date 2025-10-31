@@ -1,4 +1,7 @@
 // Random number generation interface - Requirement 5
+// WASI-compatible RNG interface that works in TEE environments including Intel TDX
+// Uses hardware RNG (RDRAND/RDSEED on Intel) through ring and getrandom
+// TDX provides hardware-backed random number generation with CPU instructions
 
 use crate::error::{HalError, HalResult};
 use getrandom::getrandom;
@@ -188,11 +191,25 @@ pub mod hardware_rng {
     /// Check if hardware RNG is available
     pub fn is_hardware_rng_available() -> bool {
         // Check for CPU features like RDRAND/RDSEED on x86_64
+        // Intel TDX provides RDRAND/RDSEED instructions for hardware RNG
         #[cfg(target_arch = "x86_64")]
         {
-            // In a real implementation, this would check CPUID for RDRAND/RDSEED
-            // For now, assume it's available on modern x86_64 systems
-            true
+            // Check CPU flags for RDRAND and RDSEED
+            if let Ok(content) = std::fs::read_to_string("/proc/cpuinfo") {
+                let has_rdrand = content.contains("rdrand");
+                let has_rdseed = content.contains("rdseed");
+                let is_tdx = content.contains("tdx_guest");
+                
+                if is_tdx {
+                    println!("Intel TDX Hardware RNG:");
+                    println!("  - RDRAND available: {}", has_rdrand);
+                    println!("  - RDSEED available: {}", has_rdseed);
+                }
+                
+                has_rdrand || has_rdseed
+            } else {
+                false
+            }
         }
         #[cfg(not(target_arch = "x86_64"))]
         {

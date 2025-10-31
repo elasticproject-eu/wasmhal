@@ -1,4 +1,7 @@
 // Object storage interface - Requirements 7 & 8
+// WASI-compatible storage interface using tokio::fs for async filesystem operations
+// Works in TEE environments including Intel TDX with standard filesystem access
+// TDX protects storage data in memory; this layer adds AES-GCM encryption at rest
 
 use crate::error::{HalError, HalResult};
 use crate::crypto::CryptoInterface;
@@ -37,12 +40,12 @@ struct Container {
 
 /// Container metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ContainerMetadata {
-    created_at: u64,
-    last_accessed: u64,
-    object_count: usize,
-    total_size: u64,
-    encrypted: bool,
+pub struct ContainerMetadata {
+    pub created_at: u64,
+    pub last_accessed: u64,
+    pub object_count: usize,
+    pub total_size: u64,
+    pub encrypted: bool,
 }
 
 /// Object metadata

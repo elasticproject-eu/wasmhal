@@ -1,4 +1,7 @@
 // Clock interface implementation - Requirement 6
+// WASI-compatible time interface that works in TEE environments including Intel TDX
+// Uses standard Rust time primitives (SystemTime, Instant) which are supported in TDX
+// TDX provides hardware-backed time counters (TSC) for high-precision timing
 
 use crate::error::{HalError, HalResult};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
