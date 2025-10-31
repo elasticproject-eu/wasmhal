@@ -5,12 +5,12 @@
 [![Rust](https://img.shields.io/badge/rust-2021-orange.svg)](https://www.rust-lang.org)
 [![WASI](https://img.shields.io/badge/WASI-0.2-blue.svg)](https://wasi.dev)
 [![TEE](https://img.shields.io/badge/TEE-AMD%20SEV--SNP-green.svg)](https://www.amd.com/en/developer/sev.html)
-[![TDX](https://img.shields.io/badge/Intel%20TDX-Planned-yellow.svg)](https://www.intel.com/content/www/us/en/developer/tools/trust-domain-extensions/overview.html)
+[![TDX](https://img.shields.io/badge/Intel%20TDX-Implemented-green.svg)](https://www.intel.com/content/www/us/en/developer/tools/trust-domain-extensions/overview.html)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## Overview
 
-The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interface for Trusted Execution Environment (TEE) workloads to interact with platform-specific hardware features while maintaining portability across different TEE implementations. Built for confidential computing applications, it offers WASI 0.2 compliance and supports AMD SEV-SNP and Intel TDX (incomplete) platforms.
+The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interface for Trusted Execution Environment (TEE) workloads to interact with platform-specific hardware features while maintaining portability across different TEE implementations. Built for confidential computing applications, it offers WASI 0.2 compliance and supports both AMD SEV-SNP and Intel TDX platforms.
 
 ## Features
 
@@ -39,7 +39,11 @@ The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interf
 ### Platform Support
 
 - **AMD SEV-SNP** - Secure Nested Paging with guest attestation ✅ **Fully Implemented**
-- **Intel TDX** - Trust Domain Extensions with measurement and attestation 🏗️ **Architectural Support** (Implementation in progress)
+- **Intel TDX** - Trust Domain Extensions with measurement and attestation ✅ **Fully Implemented**
+  - Hardware RNG (RDRAND/RDSEED)
+  - TD Quote generation with MRTD and RTMR measurements
+  - TSM (Trust Security Module) integration
+  - All 4 WASI interfaces verified and operational
 - **ARM TrustZone** - Future support planned
 - **Generic TEE** - Fallback implementation for other platforms
 
@@ -47,7 +51,7 @@ The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interf
 
 - **Rust 2021 Edition** or later
 - **WASI 0.2** compatible runtime (Wasmtime recommended)
-- **TEE Platform** - AMD SEV-SNP (Intel TDX support in development)
+- **TEE Platform** - AMD SEV-SNP or Intel TDX
 - **GPU** (optional) - For compute acceleration features
 
 ## Installation
@@ -69,6 +73,7 @@ use elastic_tee_hal::{ElasticTeeHal, HalResult};
 #[tokio::main]
 async fn main() -> HalResult<()> {
     // Initialize HAL with automatic platform detection
+    // Detects AMD SEV-SNP or Intel TDX automatically
     let hal = ElasticTeeHal::new()?;
     
     // Initialize platform-specific features
@@ -287,7 +292,7 @@ async fn gpu_example() -> HalResult<()> {
 │                                                                 │
 │           ┌─────────────┐              ┌─────────────┐          │
 │           │ AMD SEV-SNP │              │ Intel TDX   │          │
-│           │ ✅ Working  │              │🏗️ Planned   │          │
+│           │ ✅ Working  │              │ ✅ Working  │          │
 │           └─────────────┘              └─────────────┘          │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -317,7 +322,7 @@ async fn gpu_example() -> HalResult<()> {
 │  │                 │  │                 │  │                 │            │
 │  │ • Auto-detect   │  │ • Feature list  │  │ • Unified       │            │
 │  │ • AMD SEV ✅    │  │ • Platform      │  │   error types   │            │
-│  │ • Intel TDX 🏗️  │  │   limits        │  │ • Result<T,E>   │            │
+│  │ • Intel TDX ✅  │  │   limits        │  │ • Result<T,E>   │            │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘            │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -366,13 +371,13 @@ async fn gpu_example() -> HalResult<()> {
 │  ┌─────────────────┐       ┌─────────────────┐       ┌───────────────────┐ │
 │  │   AMD SEV-SNP   │       │   Intel TDX     │       │   Generic/Future  │ │
 │  │ =============== │       │ =============== │       │ ================= │ │
-│  │ ✅ Working      │       │ 🏗️ Planned      │       │ Future Platforms  │ │
+│  │ ✅ Working      │       │ ✅ Working      │       │ Future Platforms  │ │
 │  │                 │       │                 │       │                   │ │
-│  │ Hardware:       │       │ Placeholder:    │       │ • ARM TrustZone   │ │
-│  │ • /dev/sev-*    │       │ • MADT check    │       │ • RISC-V Keystone │ │
-│  │ • TSM support   │       │ • Stub init     │       │ • Others...       │ │
-│  │ • Real detect   │       │ • TODO impls    │       │                   │ │
-│  │ • Attestation   │       │                 │       │                   │ │
+│  │ Hardware:       │       │ Hardware:       │       │ • ARM TrustZone   │ │
+│  │ • /dev/sev-*    │       │ • /dev/tdx_guest│       │ • RISC-V Keystone │ │
+│  │ • TSM support   │       │ • TSM support   │       │ • Others...       │ │
+│  │ • Real detect   │       │ • RDRAND/RDSEED │       │                   │ │
+│  │ • Attestation   │       │ • TD Quote gen  │       │                   │ │
 │  └─────────────────┘       └─────────────────┘       └───────────────────┘ │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -386,9 +391,10 @@ async fn gpu_example() -> HalResult<()> {
 │    │  Hardware   │    │  Hardware   │    │    Stack    │                  │
 │    │             │    │             │    │             │                  │
 │    │ • SEV-SNP   │    │ • AES-NI    │    │ • TCP/IP    │                  │
-│    │ • TDX (fut) │    │ • RDRAND    │    │ • TLS libs  │                  │
-│    │ • TrustZone │    │ • Platform  │    │ • Sockets   │                  │
-│    │   (future)  │    │   RNG       │    │             │                  │
+│    │ • TDX       │    │ • RDRAND    │    │ • TLS libs  │                  │
+│    │ • TrustZone │    │ • RDSEED    │    │ • Sockets   │                  │
+│    │   (future)  │    │ • Platform  │    │             │                  │
+│    │             │    │   RNG       │    │             │                  │
 │    └─────────────┘    └─────────────┘    └─────────────┘                  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
