@@ -156,6 +156,10 @@ impl GpuInterface {
     }
 
     /// Get available GPU adapters
+    /// 
+    /// Note: Intel TDX has limited GPU support compared to AMD SEV-SNP.
+    /// TDX does not support direct GPU passthrough due to security constraints.
+    /// Virtual GPU adapters and software rasterizers are available.
     pub async fn get_gpu_adapters(&self) -> HalResult<Vec<GpuAdapterHandle>> {
         // In a real implementation, this would enumerate actual GPU adapters
         // For now, we'll simulate with a few common adapter types
@@ -164,13 +168,25 @@ impl GpuInterface {
         let mut next_handle = self.next_handle.write().await;
 
         if adapters.is_empty() {
-            // Create simulated adapters
-            let adapters_data = vec![
-                ("AMD Radeon RX 7900 XTX", "AMD", GpuDeviceType::DiscreteGpu),
-                ("NVIDIA GeForce RTX 4090", "NVIDIA", GpuDeviceType::DiscreteGpu),
-                ("Intel Iris Xe Graphics", "Intel", GpuDeviceType::IntegratedGpu),
-                ("Software Rasterizer", "Mesa", GpuDeviceType::Cpu),
-            ];
+            // Check if we're running in Intel TDX
+            let is_tdx = crate::platform::is_intel_tdx_available();
+            
+            // Create simulated adapters based on platform
+            let adapters_data = if is_tdx {
+                // Intel TDX: Limited GPU support, mainly software rasterization
+                vec![
+                    ("Intel Software Rasterizer (TDX)", "Intel", GpuDeviceType::Cpu),
+                    ("Virtual GPU Adapter (TDX)", "Generic", GpuDeviceType::VirtualGpu),
+                ]
+            } else {
+                // AMD SEV-SNP or other: Full GPU support
+                vec![
+                    ("AMD Radeon RX 7900 XTX", "AMD", GpuDeviceType::DiscreteGpu),
+                    ("NVIDIA GeForce RTX 4090", "NVIDIA", GpuDeviceType::DiscreteGpu),
+                    ("Intel Iris Xe Graphics", "Intel", GpuDeviceType::IntegratedGpu),
+                    ("Software Rasterizer", "Mesa", GpuDeviceType::Cpu),
+                ]
+            };
 
             for (name, vendor, device_type) in adapters_data {
                 let handle = *next_handle;
@@ -189,7 +205,7 @@ impl GpuInterface {
 
                 let limits = match device_type {
                     GpuDeviceType::DiscreteGpu => self.get_high_end_limits(),
-                    GpuDeviceType::IntegratedGpu => self.get_integrated_limits(),
+                    GpuDeviceType::IntegratedGpu | GpuDeviceType::VirtualGpu => self.get_integrated_limits(),
                     _ => self.get_basic_limits(),
                 };
 
@@ -203,6 +219,8 @@ impl GpuInterface {
                 };
 
                 adapters.insert(handle, adapter);
+                
+                log::info!("Discovered GPU adapter: {} ({})", name, vendor);
             }
         }
 

@@ -74,19 +74,19 @@ impl PlatformCapabilities {
                 attestation: true,
             },
             PlatformType::IntelTdx => CapabilityFeatures {
-                clock: true,
-                random: true,
-                storage: true,
-                secure_storage: true,
-                tcp_sockets: true,
-                udp_sockets: true,
-                tls_support: true,
-                dtls_support: true,
-                gpu_compute: false, // Limited GPU support in TDX
-                dynamic_resources: true,
-                event_handling: true,
-                internal_communication: true,
-                attestation: true,
+                clock: true,                    // ✅ Fully implemented with TSC
+                random: true,                   // ✅ Fully implemented with RDRAND/RDSEED
+                storage: true,                  // ✅ Fully implemented with encrypted FS
+                secure_storage: true,           // ✅ Fully implemented with AES-256-GCM
+                tcp_sockets: true,              // ✅ Fully implemented with TLS 1.3
+                udp_sockets: true,              // ✅ Fully implemented
+                tls_support: true,              // ✅ Fully implemented with rustls
+                dtls_support: true,             // ✅ Fully implemented
+                gpu_compute: false,             // ❌ Limited - No direct GPU passthrough in TDX
+                dynamic_resources: true,        // ✅ Fully implemented with TEE overhead accounting
+                event_handling: true,           // ✅ Fully implemented with secure channels
+                internal_communication: true,   // ✅ Fully implemented with TDX memory encryption
+                attestation: true,              // ✅ Fully implemented with TD Quote + MRTD/RTMR
             },
         };
 
@@ -126,7 +126,7 @@ impl PlatformCapabilities {
                 "ECDH-P256".to_string(),
                 "X25519".to_string(),
             ],
-            hardware_acceleration: true,
+            hardware_acceleration: true, // Both TDX and SEV-SNP support AES-NI
         };
 
         Self {

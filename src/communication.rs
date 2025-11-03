@@ -11,11 +11,18 @@ use serde::{Deserialize, Serialize};
 pub type CommBufferHandle = u64;
 
 /// Protected internal communication interface
+/// 
+/// In Intel TDX environments:
+/// - Communication buffers are protected by TDX memory encryption
+/// - Encryption keys can be derived from TDX measurements (MRTD/RTMR)
+/// - Cross-TD communication requires explicit shared memory setup
+/// - TDX attestation can be used for buffer authentication
 #[derive(Debug)]
 pub struct CommunicationInterface {
     buffers: Arc<RwLock<HashMap<CommBufferHandle, CommunicationBuffer>>>,
     next_handle: Arc<RwLock<CommBufferHandle>>,
     crypto: Option<Arc<CryptoInterface>>,
+    is_tdx_env: bool,
 }
 
 /// Communication buffer for inter-workload communication
@@ -98,19 +105,34 @@ pub struct BufferConfig {
 impl CommunicationInterface {
     /// Create a new communication interface
     pub fn new() -> Self {
+        let is_tdx_env = crate::platform::is_intel_tdx_available();
+        
+        if is_tdx_env {
+            log::info!("Communication interface initialized in Intel TDX secure mode");
+            log::info!("All communication buffers are protected by TDX memory encryption");
+        }
+        
         Self {
             buffers: Arc::new(RwLock::new(HashMap::new())),
             next_handle: Arc::new(RwLock::new(1)),
             crypto: None,
+            is_tdx_env,
         }
     }
 
     /// Create communication interface with encryption support
     pub fn with_crypto(crypto: Arc<CryptoInterface>) -> Self {
+        let is_tdx_env = crate::platform::is_intel_tdx_available();
+        
+        if is_tdx_env {
+            log::info!("Communication interface initialized with TDX-enhanced encryption");
+        }
+        
         Self {
             buffers: Arc::new(RwLock::new(HashMap::new())),
             next_handle: Arc::new(RwLock::new(1)),
             crypto: Some(crypto),
+            is_tdx_env,
         }
     }
 

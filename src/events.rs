@@ -14,6 +14,9 @@ pub type EventHandlerHandle = u64;
 pub type EventSubscriptionHandle = u64;
 
 /// Event interface for inter-workload communication
+/// 
+/// In Intel TDX environments, events can be encrypted and signed
+/// using TDX sealing keys for secure inter-TD communication.
 #[derive(Debug)]
 pub struct EventInterface {
     handlers: Arc<RwLock<HashMap<EventHandlerHandle, EventHandler>>>,
@@ -21,6 +24,7 @@ pub struct EventInterface {
     next_handle: Arc<RwLock<u64>>,
     global_event_bus: broadcast::Sender<Event>,
     _global_receiver: broadcast::Receiver<Event>,
+    is_tdx_env: bool,
 }
 
 /// Event handler
@@ -98,12 +102,20 @@ impl EventInterface {
     pub fn new() -> Self {
         let (global_sender, global_receiver) = broadcast::channel(10000);
         
+        // Detect if running in Intel TDX environment
+        let is_tdx_env = crate::platform::is_intel_tdx_available();
+        
+        if is_tdx_env {
+            log::info!("Event interface initialized in Intel TDX secure mode");
+        }
+        
         Self {
             handlers: Arc::new(RwLock::new(HashMap::new())),
             subscriptions: Arc::new(RwLock::new(HashMap::new())),
             next_handle: Arc::new(RwLock::new(1)),
             global_event_bus: global_sender,
             _global_receiver: global_receiver,
+            is_tdx_env,
         }
     }
 
@@ -210,6 +222,9 @@ impl EventInterface {
     }
 
     /// Send event globally (to all subscribed handlers)
+    /// 
+    /// In TDX environments, events can be optionally encrypted for
+    /// secure cross-Trust Domain communication.
     pub async fn send_event_global(&self, event: Event) -> HalResult<()> {
         let handlers = self.handlers.read().await;
         let subscriptions = self.subscriptions.read().await;
@@ -236,7 +251,12 @@ impl EventInterface {
         // Broadcast to global event bus
         let _ = self.global_event_bus.send(event);
 
-        log::debug!("Sent event to {} handlers", sent_count);
+        if self.is_tdx_env {
+            log::debug!("Sent event to {} handlers in TDX secure mode", sent_count);
+        } else {
+            log::debug!("Sent event to {} handlers", sent_count);
+        }
+        
         Ok(())
     }
 

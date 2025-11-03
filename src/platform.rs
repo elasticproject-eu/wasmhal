@@ -144,7 +144,7 @@ impl ElasticTeeHal {
     }
 
     /// Check if Intel TDX is available
-    fn is_intel_tdx_available() -> bool {
+    pub fn is_intel_tdx_available() -> bool {
         // Check for Intel TDX Trust Domain
         // This verifies:
         // - CPU vendor (Intel)
@@ -386,4 +386,9 @@ impl Default for ElasticTeeHal {
     fn default() -> Self {
         Self::new().expect("Failed to create default HAL instance")
     }
+}
+
+/// Check if Intel TDX is available (standalone function for external use)
+pub fn is_intel_tdx_available() -> bool {
+    ElasticTeeHal::is_intel_tdx_available()
 }

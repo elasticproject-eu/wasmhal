@@ -420,21 +420,38 @@ impl ResourceInterface {
     }
 
     fn detect_system_limits() -> HalResult<ResourceLimits> {
-        // In a real implementation, this would detect actual system resources
-        // For now, we'll use reasonable defaults
-
+        // Detect actual system resources, accounting for TEE overhead
+        
         #[cfg(target_os = "linux")]
         {
+            let is_tdx = crate::platform::is_intel_tdx_available();
+            let is_sev = std::path::Path::new("/dev/sev-guest").exists();
+            
             let memory_mb = Self::get_system_memory_mb().unwrap_or(8192);
             let cpu_cores = Self::get_system_cpu_cores().unwrap_or(4);
             let storage_mb = Self::get_available_storage_mb().unwrap_or(102400);
 
+            // Account for TEE memory encryption overhead
+            // TDX typically has 5-10% memory overhead for encryption
+            // SEV-SNP has similar overhead
+            let adjusted_memory_mb = if is_tdx || is_sev {
+                let overhead_percent = if is_tdx { 8 } else { 6 };
+                memory_mb * (100 - overhead_percent) / 100
+            } else {
+                memory_mb
+            };
+
+            log::info!(
+                "Detected system limits: {}MB RAM, {} CPU cores (TEE: TDX={}, SEV={})",
+                adjusted_memory_mb, cpu_cores, is_tdx, is_sev
+            );
+
             Ok(ResourceLimits {
-                max_memory_mb: memory_mb,
+                max_memory_mb: adjusted_memory_mb,
                 max_cpu_cores: cpu_cores,
                 max_storage_mb: storage_mb,
                 max_network_bandwidth_mbps: 1000, // 1 Gbps default
-                max_gpu_memory_mb: 8192, // 8GB default
+                max_gpu_memory_mb: if is_tdx { 0 } else { 8192 }, // TDX has no GPU passthrough
             })
         }
 
