@@ -48,9 +48,11 @@ The monolithic `world.wit` has been broken down into separate, composable interf
 5. **WASI Alignment** - Follows modern WASI composition patterns
 6. **Clearer Boundaries** - Better separation of concerns
 
-## Proposed API (Future Implementation)
+## Proposed API (Implementation In Progress)
 
-The following examples show the intended usage patterns once the Rust linker integration is implemented:
+**Status**: The WIT interface definitions are complete. The Rust linker API implementation is in progress and requires proper Wasmtime bindgen integration.
+
+The following examples show the intended usage patterns once the Rust linker integration is fully implemented:
 
 ### Using Individual Interfaces
 

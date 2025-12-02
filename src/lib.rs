@@ -25,6 +25,10 @@ pub mod resources;
 pub mod events;
 pub mod communication;
 
+// Modular interface system
+pub mod interfaces;
+pub mod providers;
+
 // Re-export main types
 pub use error::{HalError, HalResult};
 pub use platform::ElasticTeeHal;

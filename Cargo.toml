@@ -48,6 +48,9 @@ anyhow = "1.0"
 log = "0.4"
 env_logger = "0.11"
 
+# Async executor for wasmtime bindings
+futures = "0.3"
+
 # Random number generation
 getrandom = { version = "0.2", features = ["std"] }
 
@@ -59,6 +62,7 @@ default = ["amd-sev"]
 amd-sev = []
 gpu = ["wgpu"]
 component = ["wasmtime", "cargo-component"]
+wasmtime = ["dep:wasmtime"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
