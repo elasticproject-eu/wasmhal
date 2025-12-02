@@ -28,10 +28,12 @@ async fn test_tdx_platform_detection() -> HalResult<()> {
     println!("  - Network support: {}", capabilities.features.tcp_sockets);
     println!("  - Attestation support: {}", capabilities.features.attestation);
     
-    // Test attestation
-    let attestation = hal.attest().await?;
+    // Test attestation with report data (nonce)
+    let nonce = b"test_nonce_12345";
+    let attestation = hal.attest(nonce).await?;
     println!("\n✓ Generated TDX attestation");
     println!("  - Attestation size: {} bytes", attestation.len());
+    println!("  - Report data: {} bytes", nonce.len());
     
     Ok(())
 }
@@ -231,9 +233,11 @@ async fn test_tdx_all_interfaces_integration() -> HalResult<()> {
     let elapsed = time_end.seconds - time_start.seconds;
     println!("\n✓ Integration test completed in {} seconds", elapsed);
     
-    // 6. Generate final attestation
-    let attestation = hal.attest().await?;
+    // 6. Generate final attestation with report data
+    let report_data = b"integration_test_completed";
+    let attestation = hal.attest(report_data).await?;
     println!("✓ Final attestation generated: {} bytes", attestation.len());
+    println!("  - Report data: {:?}", String::from_utf8_lossy(report_data));
     
     println!("\n=== ALL TESTS PASSED ===");
     println!("Intel TDX environment fully functional with:");

@@ -258,8 +258,12 @@ impl ElasticTeeHal {
         self.initialized
     }
 
-    /// Perform platform attestation
-    pub async fn attest(&self) -> HalResult<Vec<u8>> {
+    /// Perform platform attestation with custom report data
+    /// 
+    /// # Arguments
+    /// * `report_data` - Custom data to include in the attestation report (e.g., nonce, challenge)
+    ///                   For TDX, this should be up to 64 bytes. For SEV-SNP, up to 64 bytes.
+    pub async fn attest(&self, report_data: &[u8]) -> HalResult<Vec<u8>> {
         if !self.initialized {
             return Err(HalError::TeeInitializationFailed(
                 "HAL not initialized".to_string()
@@ -267,19 +271,25 @@ impl ElasticTeeHal {
         }
 
         match self.platform_type {
-            PlatformType::AmdSev => self.amd_sev_attest().await,
-            PlatformType::IntelTdx => self.intel_tdx_attest().await,
+            PlatformType::AmdSev => self.amd_sev_attest(report_data).await,
+            PlatformType::IntelTdx => self.intel_tdx_attest(report_data).await,
         }
     }
 
     /// AMD SEV attestation
-    async fn amd_sev_attest(&self) -> HalResult<Vec<u8>> {
+    async fn amd_sev_attest(&self, report_data: &[u8]) -> HalResult<Vec<u8>> {
         // In a real implementation, this would:
         // - Generate attestation report
         // - Include measurement data
         // - Sign with platform key
+        // - Include the provided report_data in the attestation report
         
-        log::info!("Generating AMD SEV attestation report");
+        log::info!("Generating AMD SEV attestation report with {} bytes of report data", report_data.len());
+        
+        // Truncate or pad report_data to 64 bytes for SEV-SNP
+        let mut report_data_padded = vec![0u8; 64];
+        let copy_len = report_data.len().min(64);
+        report_data_padded[..copy_len].copy_from_slice(&report_data[..copy_len]);
         
         // Placeholder attestation data
         let attestation_data = serde_json::json!({
@@ -293,15 +303,16 @@ impl ElasticTeeHal {
                 "bootloader": "placeholder_hash",
                 "kernel": "placeholder_hash",
                 "hal": "placeholder_hash"
-            }
+            },
+            "report_data": hex::encode(&report_data_padded)
         });
 
         Ok(attestation_data.to_string().into_bytes())
     }
 
     /// Intel TDX attestation
-    async fn intel_tdx_attest(&self) -> HalResult<Vec<u8>> {
-        log::info!("Generating Intel TDX attestation quote");
+    async fn intel_tdx_attest(&self, report_data: &[u8]) -> HalResult<Vec<u8>> {
+        log::info!("Generating Intel TDX attestation quote with {} bytes of report data", report_data.len());
         
         // TDX attestation uses the TSM (Trust Security Module) interface
         // The process involves:
@@ -309,16 +320,28 @@ impl ElasticTeeHal {
         // 2. Trigger quote generation
         // 3. Read the TD Quote from TSM
         
-        // Generate report data (64 bytes for TDX)
-        let mut report_data = vec![0u8; 64];
+        // Prepare report data (64 bytes for TDX)
+        let mut report_data_padded = vec![0u8; 64];
         
-        // Fill with timestamp and measurement info
+        // Copy user-provided report data (truncate if > 64 bytes)
+        let copy_len = report_data.len().min(64);
+        report_data_padded[..copy_len].copy_from_slice(&report_data[..copy_len]);
+        
+        // If report data is smaller than 64 bytes, fill remaining space with timestamp
+        if copy_len < 64 {
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            let timestamp_bytes = timestamp.to_le_bytes();
+            let fill_len = (64 - copy_len).min(8);
+            report_data_padded[copy_len..copy_len + fill_len].copy_from_slice(&timestamp_bytes[..fill_len]);
+        }
+        
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
-        report_data[0..8].copy_from_slice(&timestamp.to_le_bytes());
         
         // For production use, this would:
         // 1. Use /dev/tdx_guest IOCTL TDX_CMD_GET_REPORT0
@@ -339,7 +362,7 @@ impl ElasticTeeHal {
                 "rtmr3": self.get_tdx_measurement("RTMR3")?,
                 "hal": hex::encode(ring::digest::digest(&ring::digest::SHA256, crate::HAL_VERSION.as_bytes()).as_ref()),
             },
-            "report_data": hex::encode(&report_data),
+            "report_data": hex::encode(&report_data_padded),
             "tdx_module_version": self.get_tdx_module_version()?,
         });
 

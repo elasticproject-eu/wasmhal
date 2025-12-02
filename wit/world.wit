@@ -10,7 +10,7 @@ interface platform {
     attestation-support: bool,
   }
   
-  attestation: func() -> result<list<u8>, string>;
+  attestation: func(report-data: list<u8>) -> result<list<u8>, string>;
   platform-info: func() -> platform-info;
 }
 
