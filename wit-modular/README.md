@@ -48,12 +48,14 @@ The monolithic `world.wit` has been broken down into separate, composable interf
 5. **WASI Alignment** - Follows modern WASI composition patterns
 6. **Clearer Boundaries** - Better separation of concerns
 
-## Usage Examples
+## Proposed API (Future Implementation)
+
+The following examples show the intended usage patterns once the Rust linker integration is implemented:
 
 ### Using Individual Interfaces
 
 ```rust
-// Only link the interfaces you need
+// Only link the interfaces you need (proposed API)
 elastic_hal::platform::add_to_linker(&mut linker)?;
 elastic_hal::crypto::add_to_linker(&mut linker)?;
 ```
@@ -61,7 +63,7 @@ elastic_hal::crypto::add_to_linker(&mut linker)?;
 ### Using Composed Worlds
 
 ```rust
-// Use a minimal world for attestation-only workloads
+// Use a minimal world for attestation-only workloads (proposed API)
 let mut linker = Linker::new(&engine);
 elastic_hal::minimal::add_to_linker(&mut linker)?;
 ```
@@ -69,9 +71,11 @@ elastic_hal::minimal::add_to_linker(&mut linker)?;
 ### Full HAL (Backward Compatible)
 
 ```rust
-// Use all interfaces (equivalent to old monolithic world)
+// Use all interfaces (equivalent to old monolithic world) (proposed API)
 elastic_hal::add_to_linker(&mut linker)?;
 ```
+
+**Note:** These APIs are not yet implemented. The WIT interface definitions are complete, but the Rust `add_to_linker` implementations and Wasmtime bindings still need to be created.
 
 ## Migration from Monolithic World
 
