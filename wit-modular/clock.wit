@@ -1,0 +1,25 @@
+// ELASTIC TEE HAL - Clock Interface
+// System time and monotonic clocks with TEE-aware timekeeping
+
+package elastic:clock@0.1.0;
+
+interface clock {
+  record system-time {
+    seconds: u64,
+    nanoseconds: u32,
+  }
+  
+  record monotonic-time {
+    elapsed-seconds: u64,
+    elapsed-nanoseconds: u32,
+  }
+  
+  system-time: func() -> result<system-time, string>;
+  monotonic-time: func() -> result<monotonic-time, string>;
+  resolution: func() -> result<u64, string>;
+  sleep: func(duration-ns: u64) -> result<unit, string>;
+}
+
+world clock-world {
+  export clock;
+}

@@ -1,0 +1,19 @@
+// ELASTIC TEE HAL - Capabilities Interface
+// Runtime feature discovery and platform capability queries
+
+package elastic:capabilities@0.1.0;
+
+interface capabilities {
+  record capability-info {
+    feature-name: string,
+    supported: bool,
+    version: string,
+  }
+  
+  list-capabilities: func() -> list<capability-info>;
+  has-capability: func(feature-name: string) -> bool;
+}
+
+world capabilities-world {
+  export capabilities;
+}

@@ -1,0 +1,19 @@
+// ELASTIC TEE HAL - Platform Interface
+// Platform detection, information, and attestation
+
+package elastic:platform@0.1.0;
+
+interface platform {
+  record platform-info {
+    platform-type: string,
+    version: string,
+    attestation-support: bool,
+  }
+  
+  attestation: func(report-data: list<u8>) -> result<list<u8>, string>;
+  platform-info: func() -> platform-info;
+}
+
+world platform-world {
+  export platform;
+}

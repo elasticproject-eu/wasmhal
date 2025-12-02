@@ -1,0 +1,73 @@
+// ELASTIC TEE HAL - Complete World (Composition)
+// This world imports all individual interface packages and exports them together
+// Use this for a full HAL implementation, or use individual worlds for modular development
+
+package elastic:tee-hal@0.1.0;
+
+// Import individual interface packages
+use elastic:platform@0.1.0.{platform};
+use elastic:capabilities@0.1.0.{capabilities};
+use elastic:crypto@0.1.0.{crypto};
+use elastic:storage@0.1.0.{storage};
+use elastic:sockets@0.1.0.{sockets};
+use elastic:gpu@0.1.0.{gpu};
+use elastic:resources@0.1.0.{resources};
+use elastic:events@0.1.0.{events};
+use elastic:communication@0.1.0.{communication};
+use elastic:clock@0.1.0.{clock};
+use elastic:random@0.1.0.{random};
+
+// Complete world with all interfaces (for backward compatibility)
+world elastic-tee-hal {
+  export platform;
+  export capabilities;
+  export crypto;
+  export storage;
+  export sockets;
+  export gpu;
+  export resources;
+  export events;
+  export communication;
+  export clock;
+  export random;
+}
+
+// Minimal world for basic TEE operations
+world elastic-tee-minimal {
+  export platform;
+  export capabilities;
+  export crypto;
+  export random;
+}
+
+// Attestation-focused world
+world elastic-tee-attestation {
+  export platform;
+  export crypto;
+  export random;
+}
+
+// Storage-focused world
+world elastic-tee-storage {
+  export platform;
+  export capabilities;
+  export crypto;
+  export storage;
+}
+
+// Network-focused world
+world elastic-tee-network {
+  export platform;
+  export capabilities;
+  export crypto;
+  export sockets;
+  export communication;
+}
+
+// Compute-focused world
+world elastic-tee-compute {
+  export platform;
+  export capabilities;
+  export gpu;
+  export resources;
+}
