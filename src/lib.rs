@@ -28,6 +28,7 @@ pub mod communication;
 // Modular interface system
 pub mod interfaces;
 pub mod providers;
+pub mod enforcement;
 
 // Re-export main types
 pub use error::{HalError, HalResult};

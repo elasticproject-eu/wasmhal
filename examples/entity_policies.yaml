@@ -1,0 +1,129 @@
+# Example Entity Policy Configuration
+
+# Complete policy configuration with multiple entities
+
+entities:
+  # Attestation Service - Minimal privileges
+  - entity_id: "attestation-service"
+    capabilities:
+      platform: true
+      capabilities: true
+      crypto: false
+      random: false
+      clock: false
+      storage: false
+      sockets: false
+      gpu: false
+      resources: false
+      events: false
+      communication: false
+    rate_limits:
+      platform:
+        operations_per_second: 10
+        burst_size: 20
+    can_grant: false
+
+  # Crypto Worker - Crypto operations with quotas
+  - entity_id: "crypto-worker"
+    capabilities:
+      platform: false
+      capabilities: false
+      crypto: true
+      random: true
+      clock: true
+      storage: false
+      sockets: false
+      gpu: false
+      resources: false
+      events: false
+      communication: false
+    rate_limits:
+      crypto:
+        operations_per_second: 1000
+        burst_size: 2000
+    quotas:
+      crypto:
+        max_bytes: 10485760  # 10 MB
+        max_operations: 10000
+    can_grant: false
+
+  # Storage Service - Storage + crypto
+  - entity_id: "storage-service"
+    capabilities:
+      platform: false
+      capabilities: false
+      crypto: true
+      random: false
+      clock: true
+      storage: true
+      sockets: false
+      gpu: false
+      resources: false
+      events: false
+      communication: false
+    rate_limits:
+      storage:
+        operations_per_second: 100
+        burst_size: 200
+    quotas:
+      storage:
+        max_bytes: 1073741824  # 1 GB
+        max_operations: 100000
+    can_grant: false
+
+  # Network Service - Sockets + communication
+  - entity_id: "network-service"
+    capabilities:
+      platform: false
+      capabilities: false
+      crypto: true
+      random: true
+      clock: true
+      storage: false
+      sockets: true
+      gpu: false
+      resources: false
+      events: true
+      communication: true
+    rate_limits:
+      sockets:
+        operations_per_second: 10000
+        burst_size: 20000
+    can_grant: false
+
+  # Untrusted Service - Very limited
+  - entity_id: "untrusted-service"
+    capabilities:
+      platform: false
+      capabilities: false
+      crypto: false
+      random: true
+      clock: false
+      storage: false
+      sockets: false
+      gpu: false
+      resources: false
+      events: false
+      communication: false
+    rate_limits:
+      random:
+        operations_per_second: 100
+        burst_size: 200
+    can_grant: false
+
+# Umbrella Entity - Full control
+umbrella:
+  entity_id: "supervisor"
+  capabilities:
+    platform: true
+    capabilities: true
+    crypto: true
+    random: true
+    clock: true
+    storage: true
+    sockets: true
+    gpu: true
+    resources: true
+    events: true
+    communication: true
+  can_grant: true  # Can grant/revoke capabilities to other entities
