@@ -1,6 +1,8 @@
 # Rust build artifacts
 /target/
+**/target/
 Cargo.lock
+**/Cargo.lock
 DEMO_SCRIPT.md
 
 # IDE and editor files

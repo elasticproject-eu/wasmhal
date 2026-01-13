@@ -1,0 +1,39 @@
+[package]
+name = "hal-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "WASM runtime host that provides ELASTIC HAL to WASM components"
+
+[dependencies]
+# Parent HAL implementation
+elastic-tee-hal = { path = ".." }
+
+# WASM runtime
+wasmtime = { version = "25", features = ["component-model"] }
+wasmtime-wasi = "25"
+
+# Component model
+wit-bindgen = "0.30"
+
+# Async
+tokio = { version = "1.0", features = ["full"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[lib]
+name = "hal_runtime"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hal-runtime"
+path = "src/main.rs"
