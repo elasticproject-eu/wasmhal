@@ -29,7 +29,7 @@ interface crypto {
   sign: func(data: list<u8>, private-key: list<u8>) -> result<list<u8>, string>;
   verify: func(data: list<u8>, signature: list<u8>, public-key: list<u8>) -> result<bool, string>;
   create-context: func() -> result<crypto-context-handle, string>;
-  destroy-context: func(handle: crypto-context-handle) -> result<unit, string>;
+  destroy-context: func(handle: crypto-context-handle) -> result<_, string>;
 }
 
 world crypto-world {

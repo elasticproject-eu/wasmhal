@@ -19,7 +19,7 @@ interface random {
   get-random-bytes: func(length: u32) -> result<list<u8>, string>;
   get-secure-random: func(length: u32) -> result<list<u8>, string>;
   get-entropy-info: func() -> result<entropy-info, string>;
-  reseed: func(additional-entropy: list<u8>) -> result<unit, string>;
+  reseed: func(additional-entropy: list<u8>) -> result<_, string>;
 }
 
 world random-world {

@@ -14,10 +14,10 @@ interface clock {
     elapsed-nanoseconds: u32,
   }
   
-  system-time: func() -> result<system-time, string>;
-  monotonic-time: func() -> result<monotonic-time, string>;
+  get-system-time: func() -> result<system-time, string>;
+  get-monotonic-time: func() -> result<monotonic-time, string>;
   resolution: func() -> result<u64, string>;
-  sleep: func(duration-ns: u64) -> result<unit, string>;
+  sleep: func(duration-ns: u64) -> result<_, string>;
 }
 
 world clock-world {

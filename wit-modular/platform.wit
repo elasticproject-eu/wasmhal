@@ -11,7 +11,7 @@ interface platform {
   }
   
   attestation: func(report-data: list<u8>) -> result<list<u8>, string>;
-  platform-info: func() -> platform-info;
+  get-platform-info: func() -> platform-info;
 }
 
 world platform-world {
