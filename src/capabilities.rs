@@ -1,6 +1,6 @@
 // Platform capabilities interface - Requirement 15
 
-use crate::error::{HalError, HalResult};
+use crate::error::HalResult;
 use crate::platform::PlatformType;
 use serde::{Deserialize, Serialize};
 
@@ -74,19 +74,19 @@ impl PlatformCapabilities {
                 attestation: true,
             },
             PlatformType::IntelTdx => CapabilityFeatures {
-                clock: true,                    // ✅ Fully implemented with TSC
-                random: true,                   // ✅ Fully implemented with RDRAND/RDSEED
-                storage: true,                  // ✅ Fully implemented with encrypted FS
-                secure_storage: true,           // ✅ Fully implemented with AES-256-GCM
-                tcp_sockets: true,              // ✅ Fully implemented with TLS 1.3
-                udp_sockets: true,              // ✅ Fully implemented
-                tls_support: true,              // ✅ Fully implemented with rustls
-                dtls_support: true,             // ✅ Fully implemented
-                gpu_compute: false,             // ❌ Limited - No direct GPU passthrough in TDX
-                dynamic_resources: true,        // ✅ Fully implemented with TEE overhead accounting
-                event_handling: true,           // ✅ Fully implemented with secure channels
-                internal_communication: true,   // ✅ Fully implemented with TDX memory encryption
-                attestation: true,              // ✅ Fully implemented with TD Quote + MRTD/RTMR
+                clock: true,                  // ✅ Fully implemented with TSC
+                random: true,                 // ✅ Fully implemented with RDRAND/RDSEED
+                storage: true,                // ✅ Fully implemented with encrypted FS
+                secure_storage: true,         // ✅ Fully implemented with AES-256-GCM
+                tcp_sockets: true,            // ✅ Fully implemented with TLS 1.3
+                udp_sockets: true,            // ✅ Fully implemented
+                tls_support: true,            // ✅ Fully implemented with rustls
+                dtls_support: true,           // ✅ Fully implemented
+                gpu_compute: false,           // ❌ Limited - No direct GPU passthrough in TDX
+                dynamic_resources: true,      // ✅ Fully implemented with TEE overhead accounting
+                event_handling: true,         // ✅ Fully implemented with secure channels
+                internal_communication: true, // ✅ Fully implemented with TDX memory encryption
+                attestation: true,            // ✅ Fully implemented with TD Quote + MRTD/RTMR
             },
         };
 
@@ -122,10 +122,7 @@ impl PlatformCapabilities {
                 "ECDSA".to_string(),
                 "Ed25519".to_string(),
             ],
-            key_exchange: vec![
-                "ECDH-P256".to_string(),
-                "X25519".to_string(),
-            ],
+            key_exchange: vec!["ECDH-P256".to_string(), "X25519".to_string()],
             hardware_acceleration: true, // Both TDX and SEV-SNP support AES-NI
         };
 
@@ -174,11 +171,26 @@ impl PlatformCapabilities {
     /// Check if a cryptographic algorithm is supported
     pub fn is_crypto_supported(&self, algorithm_type: &str, algorithm: &str) -> bool {
         match algorithm_type {
-            "symmetric" => self.crypto_support.symmetric_ciphers.contains(&algorithm.to_string()),
-            "asymmetric" => self.crypto_support.asymmetric_ciphers.contains(&algorithm.to_string()),
-            "hash" => self.crypto_support.hash_algorithms.contains(&algorithm.to_string()),
-            "signature" => self.crypto_support.signature_schemes.contains(&algorithm.to_string()),
-            "key_exchange" => self.crypto_support.key_exchange.contains(&algorithm.to_string()),
+            "symmetric" => self
+                .crypto_support
+                .symmetric_ciphers
+                .contains(&algorithm.to_string()),
+            "asymmetric" => self
+                .crypto_support
+                .asymmetric_ciphers
+                .contains(&algorithm.to_string()),
+            "hash" => self
+                .crypto_support
+                .hash_algorithms
+                .contains(&algorithm.to_string()),
+            "signature" => self
+                .crypto_support
+                .signature_schemes
+                .contains(&algorithm.to_string()),
+            "key_exchange" => self
+                .crypto_support
+                .key_exchange
+                .contains(&algorithm.to_string()),
             _ => false,
         }
     }

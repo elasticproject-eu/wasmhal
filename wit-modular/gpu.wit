@@ -8,25 +8,25 @@ interface gpu {
   type gpu-device-handle = u64;
   type gpu-buffer-handle = u64;
   type gpu-pipeline-handle = u64;
-  
+
   enum buffer-usage {
     storage,
     uniform,
     vertex,
     index,
   }
-  
+
   record adapter-info {
     name: string,
     vendor: string,
     device-type: string,
   }
-  
+
   record buffer-descriptor {
     size: u64,
     usage: buffer-usage,
   }
-  
+
   list-adapters: func() -> result<list<gpu-adapter-handle>, string>;
   get-adapter-info: func(handle: gpu-adapter-handle) -> result<adapter-info, string>;
   create-device: func(adapter: gpu-adapter-handle) -> result<gpu-device-handle, string>;

@@ -25,32 +25,35 @@ impl RandomInterface {
     pub fn generate_random_bytes(&self, length: usize) -> HalResult<Vec<u8>> {
         if length > 1024 * 1024 {
             return Err(HalError::InvalidParameter(
-                "Requested random data too large (max 1MB)".to_string()
+                "Requested random data too large (max 1MB)".to_string(),
             ));
         }
 
         let mut buffer = vec![0u8; length];
-        self.rng.fill(&mut buffer)
-            .map_err(|_| HalError::CryptographicError("Failed to generate random bytes".to_string()))?;
-        
+        self.rng.fill(&mut buffer).map_err(|_| {
+            HalError::CryptographicError("Failed to generate random bytes".to_string())
+        })?;
+
         Ok(buffer)
     }
 
     /// Generate a random u32
     pub fn generate_random_u32(&self) -> HalResult<u32> {
         let mut buffer = [0u8; 4];
-        self.rng.fill(&mut buffer)
-            .map_err(|_| HalError::CryptographicError("Failed to generate random u32".to_string()))?;
-        
+        self.rng.fill(&mut buffer).map_err(|_| {
+            HalError::CryptographicError("Failed to generate random u32".to_string())
+        })?;
+
         Ok(u32::from_le_bytes(buffer))
     }
 
     /// Generate a random u64
     pub fn generate_random_u64(&self) -> HalResult<u64> {
         let mut buffer = [0u8; 8];
-        self.rng.fill(&mut buffer)
-            .map_err(|_| HalError::CryptographicError("Failed to generate random u64".to_string()))?;
-        
+        self.rng.fill(&mut buffer).map_err(|_| {
+            HalError::CryptographicError("Failed to generate random u64".to_string())
+        })?;
+
         Ok(u64::from_le_bytes(buffer))
     }
 
@@ -58,13 +61,13 @@ impl RandomInterface {
     pub fn generate_random_range(&self, min: u64, max: u64) -> HalResult<u64> {
         if min >= max {
             return Err(HalError::InvalidParameter(
-                "Min value must be less than max value".to_string()
+                "Min value must be less than max value".to_string(),
             ));
         }
 
         let range = max - min;
         let random_u64 = self.generate_random_u64()?;
-        
+
         // Use modulo with bias rejection for uniform distribution
         Ok(min + (random_u64 % range))
     }
@@ -72,7 +75,8 @@ impl RandomInterface {
     /// Generate a random UUID (Version 4)
     pub fn generate_uuid_v4(&self) -> HalResult<String> {
         let mut buffer = [0u8; 16];
-        self.rng.fill(&mut buffer)
+        self.rng
+            .fill(&mut buffer)
             .map_err(|_| HalError::CryptographicError("Failed to generate UUID".to_string()))?;
 
         // Set version (4) and variant bits according to RFC 4122
@@ -93,7 +97,7 @@ impl RandomInterface {
     pub fn generate_nonce(&self, length: usize) -> HalResult<Vec<u8>> {
         if length == 0 || length > 64 {
             return Err(HalError::InvalidParameter(
-                "Nonce length must be between 1 and 64 bytes".to_string()
+                "Nonce length must be between 1 and 64 bytes".to_string(),
             ));
         }
 
@@ -104,7 +108,7 @@ impl RandomInterface {
     pub fn generate_salt(&self, length: usize) -> HalResult<Vec<u8>> {
         if length < 16 || length > 64 {
             return Err(HalError::InvalidParameter(
-                "Salt length must be between 16 and 64 bytes".to_string()
+                "Salt length must be between 16 and 64 bytes".to_string(),
             ));
         }
 
@@ -115,7 +119,7 @@ impl RandomInterface {
     pub fn generate_key_material(&self, length: usize) -> HalResult<Vec<u8>> {
         if length < 16 || length > 256 {
             return Err(HalError::InvalidParameter(
-                "Key material length must be between 16 and 256 bytes".to_string()
+                "Key material length must be between 16 and 256 bytes".to_string(),
             ));
         }
 
@@ -126,12 +130,12 @@ impl RandomInterface {
     pub fn test_randomness_quality(&self, sample_size: usize) -> HalResult<f64> {
         if sample_size < 1000 || sample_size > 100_000 {
             return Err(HalError::InvalidParameter(
-                "Sample size must be between 1000 and 100000 bytes".to_string()
+                "Sample size must be between 1000 and 100000 bytes".to_string(),
             ));
         }
 
         let sample = self.generate_random_bytes(sample_size)?;
-        
+
         // Simple entropy calculation (Shannon entropy)
         let mut frequency = [0u32; 256];
         for &byte in &sample {
@@ -199,13 +203,13 @@ pub mod hardware_rng {
                 let has_rdrand = content.contains("rdrand");
                 let has_rdseed = content.contains("rdseed");
                 let is_tdx = content.contains("tdx_guest");
-                
+
                 if is_tdx {
                     println!("Intel TDX Hardware RNG:");
                     println!("  - RDRAND available: {}", has_rdrand);
                     println!("  - RDSEED available: {}", has_rdseed);
                 }
-                
+
                 has_rdrand || has_rdseed
             } else {
                 false
@@ -221,7 +225,7 @@ pub mod hardware_rng {
     pub fn hardware_random_bytes(length: usize) -> HalResult<Vec<u8>> {
         if !is_hardware_rng_available() {
             return Err(HalError::NotSupported(
-                "Hardware RNG not available on this platform".to_string()
+                "Hardware RNG not available on this platform".to_string(),
             ));
         }
 
@@ -239,10 +243,10 @@ mod tests {
     #[test]
     fn test_random_bytes_generation() {
         let rng = RandomInterface::new();
-        
+
         let bytes1 = rng.generate_random_bytes(32).unwrap();
         let bytes2 = rng.generate_random_bytes(32).unwrap();
-        
+
         assert_eq!(bytes1.len(), 32);
         assert_eq!(bytes2.len(), 32);
         assert_ne!(bytes1, bytes2); // Should be different
@@ -251,28 +255,28 @@ mod tests {
     #[test]
     fn test_random_integers() {
         let rng = RandomInterface::new();
-        
+
         let val1 = rng.generate_random_u32().unwrap();
         let val2 = rng.generate_random_u32().unwrap();
-        
+
         // Very unlikely to be the same
         assert_ne!(val1, val2);
-        
+
         let val3 = rng.generate_random_u64().unwrap();
         let val4 = rng.generate_random_u64().unwrap();
-        
+
         assert_ne!(val3, val4);
     }
 
     #[test]
     fn test_random_range() {
         let rng = RandomInterface::new();
-        
+
         for _ in 0..100 {
             let val = rng.generate_random_range(10, 20).unwrap();
             assert!(val >= 10 && val < 20);
         }
-        
+
         // Test error case
         assert!(rng.generate_random_range(20, 10).is_err());
     }
@@ -280,13 +284,13 @@ mod tests {
     #[test]
     fn test_uuid_generation() {
         let rng = RandomInterface::new();
-        
+
         let uuid1 = rng.generate_uuid_v4().unwrap();
         let uuid2 = rng.generate_uuid_v4().unwrap();
-        
+
         assert_ne!(uuid1, uuid2);
         assert_eq!(uuid1.len(), 36); // Standard UUID length with hyphens
-        
+
         // Check format (basic validation)
         let parts: Vec<&str> = uuid1.split('-').collect();
         assert_eq!(parts.len(), 5);
@@ -300,10 +304,10 @@ mod tests {
     #[test]
     fn test_nonce_generation() {
         let rng = RandomInterface::new();
-        
+
         let nonce = rng.generate_nonce(16).unwrap();
         assert_eq!(nonce.len(), 16);
-        
+
         // Test invalid lengths
         assert!(rng.generate_nonce(0).is_err());
         assert!(rng.generate_nonce(65).is_err());
@@ -312,10 +316,10 @@ mod tests {
     #[test]
     fn test_salt_generation() {
         let rng = RandomInterface::new();
-        
+
         let salt = rng.generate_salt(32).unwrap();
         assert_eq!(salt.len(), 32);
-        
+
         // Test invalid lengths
         assert!(rng.generate_salt(8).is_err()); // Too short
         assert!(rng.generate_salt(100).is_err()); // Too long
@@ -324,10 +328,10 @@ mod tests {
     #[test]
     fn test_key_material_generation() {
         let rng = RandomInterface::new();
-        
+
         let key = rng.generate_key_material(32).unwrap();
         assert_eq!(key.len(), 32);
-        
+
         // Test invalid lengths
         assert!(rng.generate_key_material(8).is_err()); // Too short
         assert!(rng.generate_key_material(300).is_err()); // Too long
@@ -336,9 +340,9 @@ mod tests {
     #[test]
     fn test_randomness_quality() {
         let rng = RandomInterface::new();
-        
+
         let entropy = rng.test_randomness_quality(10000).unwrap();
-        
+
         // Good random data should have entropy close to 8.0 (max for bytes)
         assert!(entropy > 7.5, "Entropy too low: {}", entropy);
         assert!(entropy <= 8.0, "Entropy too high: {}", entropy);
@@ -347,17 +351,17 @@ mod tests {
     #[test]
     fn test_wasi_compatibility() {
         use wasi_random::*;
-        
+
         let mut buffer = [0u8; 16];
         random_get(&mut buffer).unwrap();
-        
+
         // Buffer should be filled with non-zero values (very likely)
         assert!(buffer.iter().any(|&x| x != 0));
-        
+
         let val1 = random_u32().unwrap();
         let val2 = random_u32().unwrap();
         assert_ne!(val1, val2);
-        
+
         let val3 = random_u64().unwrap();
         let val4 = random_u64().unwrap();
         assert_ne!(val3, val4);
@@ -366,11 +370,11 @@ mod tests {
     #[test]
     fn test_hardware_rng_availability() {
         use hardware_rng::*;
-        
+
         // Test availability check
         let available = is_hardware_rng_available();
         println!("Hardware RNG available: {}", available);
-        
+
         // Test hardware random generation (may fall back to software)
         if available {
             let bytes = hardware_random_bytes(16);
@@ -381,7 +385,7 @@ mod tests {
     #[test]
     fn test_large_request_rejection() {
         let rng = RandomInterface::new();
-        
+
         // Should reject very large requests
         assert!(rng.generate_random_bytes(2 * 1024 * 1024).is_err());
     }
