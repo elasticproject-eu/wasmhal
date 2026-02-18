@@ -151,22 +151,16 @@ pub struct PolicyConfig {
 }
 
 /// Policy engine that manages and enforces policies
+#[derive(Default)]
 pub struct PolicyEngine {
     policies: HashMap<EntityId, EntityPolicy>,
     umbrella_id: Option<EntityId>,
 }
 
 impl PolicyEngine {
-    pub fn new() -> Self {
-        Self {
-            policies: HashMap::new(),
-            umbrella_id: None,
-        }
-    }
-
     /// Load policies from configuration
     pub fn from_config(config: PolicyConfig) -> EnforcementResult<Self> {
-        let mut engine = Self::new();
+        let mut engine = Self::default();
 
         // Load entity policies
         for policy in config.entities {

@@ -30,7 +30,7 @@ pub struct SocketInterface {
 enum SocketWrapper {
     TcpListener(TcpListener),
     TcpStream(TcpStream),
-    TlsStream(TlsStream<TcpStream>),
+    TlsStream(Box<TlsStream<TcpStream>>),
     UdpSocket(UdpSocket),
     // DTLS would require additional implementation
 }
@@ -320,7 +320,7 @@ impl SocketInterface {
         let mut sockets = self.sockets.write().await;
         sockets.insert(
             handle,
-            SocketWrapper::TlsStream(tokio_rustls::TlsStream::Client(tls_stream)),
+            SocketWrapper::TlsStream(Box::new(tokio_rustls::TlsStream::Client(tls_stream))),
         );
 
         Ok(handle)
@@ -383,7 +383,7 @@ impl SocketInterface {
         let mut sockets = self.sockets.write().await;
         sockets.insert(
             handle,
-            SocketWrapper::TlsStream(tokio_rustls::TlsStream::Server(tls_stream)),
+            SocketWrapper::TlsStream(Box::new(tokio_rustls::TlsStream::Server(tls_stream))),
         );
 
         Ok(handle)

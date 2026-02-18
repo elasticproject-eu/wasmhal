@@ -252,12 +252,12 @@ impl EventInterface {
                 if let Some(handler) = handlers.get(&subscription.handler_handle) {
                     // Check queue size
                     let current_size = *handler.current_queue_size.read().await;
-                    if current_size < handler.max_queue_size {
-                        if handler.sender.send(event.clone()).is_ok() {
-                            let mut queue_size = handler.current_queue_size.write().await;
-                            *queue_size += 1;
-                            sent_count += 1;
-                        }
+                    if current_size < handler.max_queue_size
+                        && handler.sender.send(event.clone()).is_ok()
+                    {
+                        let mut queue_size = handler.current_queue_size.write().await;
+                        *queue_size += 1;
+                        sent_count += 1;
                     }
                 }
             }
@@ -513,27 +513,32 @@ impl Default for EventInterface {
 
 // Helper function to use UUID without adding it as a dependency
 mod uuid {
+    use core::fmt;
+
     pub struct Uuid;
 
-    impl Uuid {
-        pub fn new_v4() -> Self {
-            Self
-        }
-
-        pub fn to_string(&self) -> String {
+    impl fmt::Display for Uuid {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             // Simple UUID-like string generator for testing
             let timestamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
 
-            format!(
+            write!(
+                f,
                 "{:x}-{:x}-{:x}-{:x}",
                 timestamp & 0xffffffff,
                 (timestamp >> 32) & 0xffff,
                 (timestamp >> 48) & 0xffff,
                 timestamp >> 64
             )
+        }
+    }
+
+    impl Uuid {
+        pub fn new_v4() -> Self {
+            Self
         }
     }
 }
