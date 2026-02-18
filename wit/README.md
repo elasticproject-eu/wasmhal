@@ -5,13 +5,17 @@ This directory contains two approaches to the WIT interface definitions:
 ## Current Structure
 
 ### `world.wit` (Monolithic - Backward Compatible)
+
 The original single-file approach with one world exporting all interfaces. Use this for:
+
 - Existing projects and backward compatibility
 - Quick prototyping with all features
 - Full HAL implementations
 
 ### `../wit-modular/` (Modular - Recommended for New Projects)
+
 Refactored into separate, composable interface packages. Use this for:
+
 - New development and incremental implementation
 - Selective feature composition
 - Independent interface versioning

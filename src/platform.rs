@@ -1,10 +1,10 @@
 // Main ELASTIC TEE HAL Platform Implementation
 
-use crate::error::{HalError, HalResult};
 use crate::capabilities::PlatformCapabilities;
+use crate::error::{HalError, HalResult};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 
 /// Main ELASTIC TEE HAL structure
 pub struct ElasticTeeHal {
@@ -26,10 +26,12 @@ impl ElasticTeeHal {
     pub fn new() -> HalResult<Self> {
         // Initialize the crypto provider for Rustls
         Self::init_crypto_provider()?;
-        
+
         let platform_type = Self::detect_platform()?;
-        let capabilities = Arc::new(RwLock::new(PlatformCapabilities::new(platform_type.clone())));
-        
+        let capabilities = Arc::new(RwLock::new(PlatformCapabilities::new(
+            platform_type.clone(),
+        )));
+
         let mut hal = Self {
             platform_type,
             capabilities,
@@ -44,9 +46,11 @@ impl ElasticTeeHal {
     pub fn with_platform(platform_type: PlatformType) -> HalResult<Self> {
         // Initialize the crypto provider for Rustls
         Self::init_crypto_provider()?;
-        
-        let capabilities = Arc::new(RwLock::new(PlatformCapabilities::new(platform_type.clone())));
-        
+
+        let capabilities = Arc::new(RwLock::new(PlatformCapabilities::new(
+            platform_type.clone(),
+        )));
+
         let mut hal = Self {
             platform_type,
             capabilities,
@@ -63,9 +67,12 @@ impl ElasticTeeHal {
             PlatformType::AmdSev => self.init_amd_sev()?,
             PlatformType::IntelTdx => self.init_intel_tdx()?,
         }
-        
+
         self.initialized = true;
-        log::info!("ELASTIC TEE HAL initialized for platform: {:?}", self.platform_type);
+        log::info!(
+            "ELASTIC TEE HAL initialized for platform: {:?}",
+            self.platform_type
+        );
         Ok(())
     }
 
@@ -73,12 +80,12 @@ impl ElasticTeeHal {
     fn init_crypto_provider() -> HalResult<()> {
         use std::sync::Once;
         static INIT: Once = Once::new();
-        
+
         INIT.call_once(|| {
             // Install the ring crypto provider for Rustls
             let _ = rustls::crypto::ring::default_provider().install_default();
         });
-        
+
         Ok(())
     }
 
@@ -95,7 +102,7 @@ impl ElasticTeeHal {
         }
 
         Err(HalError::PlatformNotSupported(
-            "No supported TEE platform detected".to_string()
+            "No supported TEE platform detected".to_string(),
         ))
     }
 
@@ -106,33 +113,33 @@ impl ElasticTeeHal {
         // - SEV capability in CPUID
         // - /dev/sev device availability
         // - SNP guest status
-        
+
         #[cfg(target_arch = "x86_64")]
         {
             // Check for AMD CPU vendor
             let is_amd = Self::is_amd_cpu();
-            
+
             // Check for SEV guest device (SNP environments)
             let has_sev_guest = std::path::Path::new("/dev/sev-guest").exists();
-            
+
             // Check for SEV device (host environments)
             let has_sev_dev = std::path::Path::new("/dev/sev").exists();
-            
+
             // Check for TSM support (Trust Security Module for attestation)
             let has_tsm = std::path::Path::new("/sys/kernel/config/tsm/report").exists();
-            
+
             println!("AMD SEV Detection:");
             println!("  - AMD CPU: {}", is_amd);
             println!("  - /dev/sev-guest: {}", has_sev_guest);
             println!("  - /dev/sev: {}", has_sev_dev);
             println!("  - TSM support: {}", has_tsm);
-            
+
             is_amd && (has_sev_guest || has_sev_dev) && has_tsm
         }
         #[cfg(not(target_arch = "x86_64"))]
         false
     }
-    
+
     /// Check if this is an AMD CPU
     fn is_amd_cpu() -> bool {
         // Read /proc/cpuinfo to check vendor
@@ -151,33 +158,33 @@ impl ElasticTeeHal {
         // - TDX guest device
         // - TDX capability in CPU flags
         // - TSM (Trust Security Module) support for attestation
-        
+
         #[cfg(target_arch = "x86_64")]
         {
             // Check for Intel CPU vendor
             let is_intel = Self::is_intel_cpu();
-            
+
             // Check for TDX guest device
             let has_tdx_guest = std::path::Path::new("/dev/tdx_guest").exists();
-            
+
             // Check for TSM support (Trust Security Module for attestation)
             let has_tsm = std::path::Path::new("/sys/kernel/config/tsm/report").exists();
-            
+
             // Check for TDX guest flag in CPU features
             let has_tdx_flag = Self::has_tdx_cpu_flag();
-            
+
             println!("Intel TDX Detection:");
             println!("  - Intel CPU: {}", is_intel);
             println!("  - /dev/tdx_guest: {}", has_tdx_guest);
             println!("  - TSM support: {}", has_tsm);
             println!("  - TDX CPU flag: {}", has_tdx_flag);
-            
+
             is_intel && has_tdx_guest && has_tsm && has_tdx_flag
         }
         #[cfg(not(target_arch = "x86_64"))]
         false
     }
-    
+
     /// Check if this is an Intel CPU
     fn is_intel_cpu() -> bool {
         // Read /proc/cpuinfo to check vendor
@@ -187,7 +194,7 @@ impl ElasticTeeHal {
             false
         }
     }
-    
+
     /// Check for TDX guest CPU flag
     fn has_tdx_cpu_flag() -> bool {
         if let Ok(content) = std::fs::read_to_string("/proc/cpuinfo") {
@@ -200,46 +207,48 @@ impl ElasticTeeHal {
     /// Initialize AMD SEV platform
     fn init_amd_sev(&self) -> HalResult<()> {
         log::info!("Initializing AMD SEV-SNP platform");
-        
+
         // In a real implementation, this would:
         // - Verify we're running in an SNP guest
         // - Set up attestation capabilities
         // - Initialize secure memory regions
         // - Configure crypto acceleration
-        
+
         Ok(())
     }
 
     /// Initialize Intel TDX platform
     fn init_intel_tdx(&self) -> HalResult<()> {
         log::info!("Initializing Intel TDX platform");
-        
+
         // Verify TDX guest device is accessible
         if !std::path::Path::new("/dev/tdx_guest").exists() {
             return Err(HalError::TeeInitializationFailed(
-                "TDX guest device /dev/tdx_guest not found".to_string()
+                "TDX guest device /dev/tdx_guest not found".to_string(),
             ));
         }
-        
+
         // Verify TSM (Trust Security Module) is available for attestation
         if !std::path::Path::new("/sys/kernel/config/tsm/report").exists() {
-            log::warn!("TSM not available at /sys/kernel/config/tsm/report - attestation may be limited");
+            log::warn!(
+                "TSM not available at /sys/kernel/config/tsm/report - attestation may be limited"
+            );
         }
-        
+
         // Verify we're running as a TDX guest
         if !Self::has_tdx_cpu_flag() {
             return Err(HalError::TeeInitializationFailed(
-                "TDX guest CPU flag not detected".to_string()
+                "TDX guest CPU flag not detected".to_string(),
             ));
         }
-        
+
         log::info!("Intel TDX platform initialized successfully");
         log::info!("  - TDX guest device: /dev/tdx_guest");
         log::info!("  - TSM support: available");
         log::info!("  - Hardware attestation: enabled");
         log::info!("  - Secure memory protection: active");
         log::info!("  - Crypto acceleration: AES-NI available");
-        
+
         Ok(())
     }
 
@@ -259,14 +268,14 @@ impl ElasticTeeHal {
     }
 
     /// Perform platform attestation with custom report data
-    /// 
+    ///
     /// # Arguments
     /// * `report_data` - Custom data to include in the attestation report (e.g., nonce, challenge)
     ///                   For TDX, this should be up to 64 bytes. For SEV-SNP, up to 64 bytes.
     pub async fn attest(&self, report_data: &[u8]) -> HalResult<Vec<u8>> {
         if !self.initialized {
             return Err(HalError::TeeInitializationFailed(
-                "HAL not initialized".to_string()
+                "HAL not initialized".to_string(),
             ));
         }
 
@@ -283,14 +292,17 @@ impl ElasticTeeHal {
         // - Include measurement data
         // - Sign with platform key
         // - Include the provided report_data in the attestation report
-        
-        log::info!("Generating AMD SEV attestation report with {} bytes of report data", report_data.len());
-        
+
+        log::info!(
+            "Generating AMD SEV attestation report with {} bytes of report data",
+            report_data.len()
+        );
+
         // Truncate or pad report_data to 64 bytes for SEV-SNP
         let mut report_data_padded = vec![0u8; 64];
         let copy_len = report_data.len().min(64);
         report_data_padded[..copy_len].copy_from_slice(&report_data[..copy_len]);
-        
+
         // Placeholder attestation data
         let attestation_data = serde_json::json!({
             "platform": "amd-sev-snp",
@@ -312,21 +324,24 @@ impl ElasticTeeHal {
 
     /// Intel TDX attestation
     async fn intel_tdx_attest(&self, report_data: &[u8]) -> HalResult<Vec<u8>> {
-        log::info!("Generating Intel TDX attestation quote with {} bytes of report data", report_data.len());
-        
+        log::info!(
+            "Generating Intel TDX attestation quote with {} bytes of report data",
+            report_data.len()
+        );
+
         // TDX attestation uses the TSM (Trust Security Module) interface
         // The process involves:
         // 1. Write report data (nonce/user data) to TSM
         // 2. Trigger quote generation
         // 3. Read the TD Quote from TSM
-        
+
         // Prepare report data (64 bytes for TDX)
         let mut report_data_padded = vec![0u8; 64];
-        
+
         // Copy user-provided report data (truncate if > 64 bytes)
         let copy_len = report_data.len().min(64);
         report_data_padded[..copy_len].copy_from_slice(&report_data[..copy_len]);
-        
+
         // If report data is smaller than 64 bytes, fill remaining space with timestamp
         if copy_len < 64 {
             let timestamp = std::time::SystemTime::now()
@@ -335,20 +350,21 @@ impl ElasticTeeHal {
                 .as_secs();
             let timestamp_bytes = timestamp.to_le_bytes();
             let fill_len = (64 - copy_len).min(8);
-            report_data_padded[copy_len..copy_len + fill_len].copy_from_slice(&timestamp_bytes[..fill_len]);
+            report_data_padded[copy_len..copy_len + fill_len]
+                .copy_from_slice(&timestamp_bytes[..fill_len]);
         }
-        
+
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         // For production use, this would:
         // 1. Use /dev/tdx_guest IOCTL TDX_CMD_GET_REPORT0
         // 2. Or use TSM configfs interface at /sys/kernel/config/tsm/report/
         // 3. Include TD measurements (MRTD, RTMR registers)
         // 4. Get Quote from TDX Quoting Enclave
-        
+
         // Create attestation structure
         let attestation_data = serde_json::json!({
             "platform": "intel-tdx",
@@ -368,7 +384,7 @@ impl ElasticTeeHal {
 
         Ok(attestation_data.to_string().into_bytes())
     }
-    
+
     /// Get TDX measurement from RTMR (Runtime Measurement Register)
     fn get_tdx_measurement(&self, register: &str) -> HalResult<String> {
         // In production, this would read from TDX RTMR registers
@@ -376,15 +392,19 @@ impl ElasticTeeHal {
         // For now, return a placeholder hash
         let hash = ring::digest::digest(
             &ring::digest::SHA384,
-            format!("tdx_{}_{}", register, std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-            ).as_bytes()
+            format!(
+                "tdx_{}_{}",
+                register,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            )
+            .as_bytes(),
         );
         Ok(hex::encode(hash.as_ref()))
     }
-    
+
     /// Get TDX module version
     fn get_tdx_module_version(&self) -> HalResult<String> {
         // In production, this would query the TDX module version
@@ -396,10 +416,10 @@ impl ElasticTeeHal {
     pub async fn verify_attestation(&self, attestation: &[u8]) -> HalResult<bool> {
         // In a real implementation, this would verify the attestation signature
         // and check measurements against known good values
-        
+
         let attestation_str = String::from_utf8_lossy(attestation);
         log::info!("Verifying attestation: {}", attestation_str);
-        
+
         // Placeholder verification
         Ok(true)
     }
