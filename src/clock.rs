@@ -4,8 +4,8 @@
 // TDX provides hardware-backed time counters (TSC) for high-precision timing
 
 use crate::error::{HalError, HalResult};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Clock interface for time operations
 #[derive(Debug)]
@@ -45,7 +45,8 @@ impl ClockInterface {
             .duration_since(UNIX_EPOCH)
             .map_err(|e| HalError::Internal(format!("System time error: {}", e)))?;
 
-        let timezone_offset_seconds = self.timezone_offset
+        let timezone_offset_seconds = self
+            .timezone_offset
             .map(|offset| offset.as_secs() as i32)
             .unwrap_or(0);
 
@@ -60,7 +61,8 @@ impl ClockInterface {
     pub fn read_timezone(&self) -> HalResult<i32> {
         // In a real implementation, this would read from system timezone settings
         // For now, return UTC (0) or cached timezone offset
-        Ok(self.timezone_offset
+        Ok(self
+            .timezone_offset
             .map(|offset| offset.as_secs() as i32)
             .unwrap_or(0))
     }
@@ -69,14 +71,14 @@ impl ClockInterface {
     pub fn set_timezone(&mut self, offset_seconds: i32) -> HalResult<()> {
         if offset_seconds.abs() > 12 * 3600 {
             return Err(HalError::InvalidParameter(
-                "Timezone offset must be between -12 and +12 hours".to_string()
+                "Timezone offset must be between -12 and +12 hours".to_string(),
             ));
         }
 
         self.timezone_offset = if offset_seconds == 0 {
             None
         } else {
-            Some(Duration::from_secs(offset_seconds.abs() as u64))
+            Some(Duration::from_secs(offset_seconds.unsigned_abs() as u64))
         };
 
         Ok(())
@@ -91,7 +93,7 @@ impl ClockInterface {
     /// Read elapsed time from monotonic clock
     pub fn read_monotonic_time(&self) -> HalResult<MonotonicTime> {
         let elapsed = self.monotonic_start.elapsed();
-        
+
         Ok(MonotonicTime {
             elapsed_seconds: elapsed.as_secs(),
             elapsed_nanoseconds: elapsed.subsec_nanos(),
@@ -142,7 +144,6 @@ impl Default for ClockInterface {
 /// WASI-compatible clock functions
 pub mod wasi_clock {
     use super::*;
-    use wasi;
 
     /// Get current time with WASI compatibility
     pub fn clock_time_get(clock_id: u32) -> HalResult<u64> {
@@ -159,9 +160,15 @@ pub mod wasi_clock {
             1 => {
                 let clock = ClockInterface::new();
                 let monotonic = clock.read_monotonic_time()?;
-                Ok((monotonic.elapsed_seconds * 1_000_000_000 + monotonic.elapsed_nanoseconds as u64))
+                Ok(
+                    monotonic.elapsed_seconds * 1_000_000_000
+                        + monotonic.elapsed_nanoseconds as u64,
+                )
             }
-            _ => Err(HalError::InvalidParameter(format!("Invalid clock ID: {}", clock_id))),
+            _ => Err(HalError::InvalidParameter(format!(
+                "Invalid clock ID: {}",
+                clock_id
+            ))),
         }
     }
 
@@ -169,7 +176,10 @@ pub mod wasi_clock {
     pub fn clock_res_get(clock_id: u32) -> HalResult<u64> {
         match clock_id {
             0 | 1 => Ok(1), // 1 nanosecond resolution
-            _ => Err(HalError::InvalidParameter(format!("Invalid clock ID: {}", clock_id))),
+            _ => Err(HalError::InvalidParameter(format!(
+                "Invalid clock ID: {}",
+                clock_id
+            ))),
         }
     }
 }
@@ -183,7 +193,7 @@ mod tests {
     async fn test_current_time() {
         let clock = ClockInterface::new();
         let time_info = clock.read_current_time().unwrap();
-        
+
         // Should be reasonably recent (after 2020)
         assert!(time_info.seconds > 1_577_836_800); // 2020-01-01
     }
@@ -191,11 +201,11 @@ mod tests {
     #[test]
     fn test_timezone() {
         let mut clock = ClockInterface::new();
-        
+
         // Test setting valid timezone
         assert!(clock.set_timezone(3600).is_ok()); // +1 hour
         assert_eq!(clock.read_timezone().unwrap(), 3600);
-        
+
         // Test invalid timezone
         assert!(clock.set_timezone(50000).is_err()); // Invalid: > 12 hours
     }
@@ -203,10 +213,10 @@ mod tests {
     #[tokio::test]
     async fn test_monotonic_timer() {
         let mut clock = ClockInterface::new();
-        
+
         clock.start_monotonic_timer().unwrap();
         tokio::time::sleep(TokioDuration::from_millis(10)).await;
-        
+
         let elapsed = clock.read_monotonic_time().unwrap();
         assert!(elapsed.elapsed_seconds > 0 || elapsed.elapsed_nanoseconds > 1_000_000);
     }
@@ -215,10 +225,10 @@ mod tests {
     fn test_high_resolution_timestamp() {
         let clock = ClockInterface::new();
         let ts1 = clock.get_high_resolution_timestamp().unwrap();
-        
+
         // Small delay
         std::thread::sleep(Duration::from_nanos(1));
-        
+
         let ts2 = clock.get_high_resolution_timestamp().unwrap();
         assert!(ts2 >= ts1);
     }
@@ -226,13 +236,13 @@ mod tests {
     #[test]
     fn test_wasi_clock_compatibility() {
         use wasi_clock::*;
-        
+
         let realtime = clock_time_get(0).unwrap();
         let monotonic = clock_time_get(1).unwrap();
-        
+
         assert!(realtime > 0);
         assert!(monotonic > 0);
-        
+
         let resolution = clock_res_get(0).unwrap();
         assert_eq!(resolution, 1);
     }

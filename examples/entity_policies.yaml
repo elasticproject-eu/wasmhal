@@ -43,7 +43,7 @@ entities:
         burst_size: 2000
     quotas:
       crypto:
-        max_bytes: 10485760  # 10 MB
+        max_bytes: 10485760 # 10 MB
         max_operations: 10000
     can_grant: false
 
@@ -67,7 +67,7 @@ entities:
         burst_size: 200
     quotas:
       storage:
-        max_bytes: 1073741824  # 1 GB
+        max_bytes: 1073741824 # 1 GB
         max_operations: 100000
     can_grant: false
 
@@ -126,4 +126,4 @@ umbrella:
     resources: true
     events: true
     communication: true
-  can_grant: true  # Can grant/revoke capabilities to other entities
+  can_grant: true # Can grant/revoke capabilities to other entities

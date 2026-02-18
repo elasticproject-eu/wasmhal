@@ -30,6 +30,7 @@ pub struct GpuInterface {
 /// GPU adapter information
 #[derive(Debug, Clone)]
 struct GpuAdapter {
+    #[allow(dead_code)]
     handle: GpuAdapterHandle,
     name: String,
     vendor: String,
@@ -41,27 +42,38 @@ struct GpuAdapter {
 /// GPU device
 #[derive(Debug, Clone)]
 struct GpuDevice {
+    #[allow(dead_code)]
     handle: GpuDeviceHandle,
+    #[allow(dead_code)]
     adapter_handle: GpuAdapterHandle,
+    #[allow(dead_code)]
     enabled_features: GpuFeatures,
+    #[allow(dead_code)]
     queue_family_index: u32,
 }
 
 /// GPU compute pipeline
 #[derive(Debug, Clone)]
 struct GpuComputePipeline {
+    #[allow(dead_code)]
     handle: GpuPipelineHandle,
     device_handle: GpuDeviceHandle,
+    #[allow(dead_code)]
     shader_code: Vec<u8>,
+    #[allow(dead_code)]
     entry_point: String,
+    #[allow(dead_code)]
     workgroup_size: [u32; 3],
 }
 
 /// GPU compute pass
 #[derive(Debug, Clone)]
 struct GpuComputePass {
+    #[allow(dead_code)]
     handle: GpuComputePassHandle,
+    #[allow(dead_code)]
     device_handle: GpuDeviceHandle,
+    #[allow(dead_code)]
     pipeline_handle: GpuPipelineHandle,
     dispatch_size: [u32; 3],
 }
@@ -129,7 +141,7 @@ pub struct GpuBufferDescriptor {
 }
 
 /// GPU buffer usage flags
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct GpuBufferUsage {
     pub map_read: bool,
     pub map_write: bool,
@@ -156,34 +168,50 @@ impl GpuInterface {
     }
 
     /// Get available GPU adapters
-    /// 
+    ///
     /// Note: Intel TDX has limited GPU support compared to AMD SEV-SNP.
     /// TDX does not support direct GPU passthrough due to security constraints.
     /// Virtual GPU adapters and software rasterizers are available.
     pub async fn get_gpu_adapters(&self) -> HalResult<Vec<GpuAdapterHandle>> {
         // In a real implementation, this would enumerate actual GPU adapters
         // For now, we'll simulate with a few common adapter types
-        
+
         let mut adapters = self.adapters.write().await;
         let mut next_handle = self.next_handle.write().await;
 
         if adapters.is_empty() {
             // Check if we're running in Intel TDX
             let is_tdx = crate::platform::is_intel_tdx_available();
-            
+
             // Create simulated adapters based on platform
             let adapters_data = if is_tdx {
                 // Intel TDX: Limited GPU support, mainly software rasterization
                 vec![
-                    ("Intel Software Rasterizer (TDX)", "Intel", GpuDeviceType::Cpu),
-                    ("Virtual GPU Adapter (TDX)", "Generic", GpuDeviceType::VirtualGpu),
+                    (
+                        "Intel Software Rasterizer (TDX)",
+                        "Intel",
+                        GpuDeviceType::Cpu,
+                    ),
+                    (
+                        "Virtual GPU Adapter (TDX)",
+                        "Generic",
+                        GpuDeviceType::VirtualGpu,
+                    ),
                 ]
             } else {
                 // AMD SEV-SNP or other: Full GPU support
                 vec![
                     ("AMD Radeon RX 7900 XTX", "AMD", GpuDeviceType::DiscreteGpu),
-                    ("NVIDIA GeForce RTX 4090", "NVIDIA", GpuDeviceType::DiscreteGpu),
-                    ("Intel Iris Xe Graphics", "Intel", GpuDeviceType::IntegratedGpu),
+                    (
+                        "NVIDIA GeForce RTX 4090",
+                        "NVIDIA",
+                        GpuDeviceType::DiscreteGpu,
+                    ),
+                    (
+                        "Intel Iris Xe Graphics",
+                        "Intel",
+                        GpuDeviceType::IntegratedGpu,
+                    ),
                     ("Software Rasterizer", "Mesa", GpuDeviceType::Cpu),
                 ]
             };
@@ -205,7 +233,9 @@ impl GpuInterface {
 
                 let limits = match device_type {
                     GpuDeviceType::DiscreteGpu => self.get_high_end_limits(),
-                    GpuDeviceType::IntegratedGpu | GpuDeviceType::VirtualGpu => self.get_integrated_limits(),
+                    GpuDeviceType::IntegratedGpu | GpuDeviceType::VirtualGpu => {
+                        self.get_integrated_limits()
+                    }
                     _ => self.get_basic_limits(),
                 };
 
@@ -219,7 +249,7 @@ impl GpuInterface {
                 };
 
                 adapters.insert(handle, adapter);
-                
+
                 log::info!("Discovered GPU adapter: {} ({})", name, vendor);
             }
         }
@@ -228,9 +258,13 @@ impl GpuInterface {
     }
 
     /// Create GPU device from adapter
-    pub async fn create_gpu_device(&self, adapter_handle: GpuAdapterHandle) -> HalResult<GpuDeviceHandle> {
+    pub async fn create_gpu_device(
+        &self,
+        adapter_handle: GpuAdapterHandle,
+    ) -> HalResult<GpuDeviceHandle> {
         let adapters = self.adapters.read().await;
-        let adapter = adapters.get(&adapter_handle)
+        let adapter = adapters
+            .get(&adapter_handle)
             .ok_or_else(|| HalError::NotFound("GPU adapter not found".to_string()))?;
 
         let mut devices = self.devices.write().await;
@@ -251,9 +285,13 @@ impl GpuInterface {
     }
 
     /// Read GPU adapter features
-    pub async fn read_gpu_adapter_features(&self, adapter_handle: GpuAdapterHandle) -> HalResult<GpuFeatures> {
+    pub async fn read_gpu_adapter_features(
+        &self,
+        adapter_handle: GpuAdapterHandle,
+    ) -> HalResult<GpuFeatures> {
         let adapters = self.adapters.read().await;
-        let adapter = adapters.get(&adapter_handle)
+        let adapter = adapters
+            .get(&adapter_handle)
             .ok_or_else(|| HalError::NotFound("GPU adapter not found".to_string()))?;
 
         Ok(adapter.features.clone())
@@ -266,15 +304,20 @@ impl GpuInterface {
         features: GpuFeatures,
     ) -> HalResult<()> {
         let mut adapters = self.adapters.write().await;
-        let adapter = adapters.get_mut(&adapter_handle)
+        let adapter = adapters
+            .get_mut(&adapter_handle)
             .ok_or_else(|| HalError::NotFound("GPU adapter not found".to_string()))?;
 
         // Validate that requested features are supported
         if features.compute_shaders && !adapter.features.compute_shaders {
-            return Err(HalError::NotSupported("Compute shaders not supported".to_string()));
+            return Err(HalError::NotSupported(
+                "Compute shaders not supported".to_string(),
+            ));
         }
         if features.shader_f64 && !adapter.features.shader_f64 {
-            return Err(HalError::NotSupported("64-bit float shaders not supported".to_string()));
+            return Err(HalError::NotSupported(
+                "64-bit float shaders not supported".to_string(),
+            ));
         }
 
         adapter.features = features;
@@ -290,12 +333,15 @@ impl GpuInterface {
         workgroup_size: [u32; 3],
     ) -> HalResult<GpuPipelineHandle> {
         let devices = self.devices.read().await;
-        let _device = devices.get(&device_handle)
+        let _device = devices
+            .get(&device_handle)
             .ok_or_else(|| HalError::NotFound("GPU device not found".to_string()))?;
 
         // Validate workgroup size
         if workgroup_size[0] == 0 || workgroup_size[1] == 0 || workgroup_size[2] == 0 {
-            return Err(HalError::InvalidParameter("Workgroup size dimensions must be > 0".to_string()));
+            return Err(HalError::InvalidParameter(
+                "Workgroup size dimensions must be > 0".to_string(),
+            ));
         }
 
         let mut pipelines = self.pipelines.write().await;
@@ -323,15 +369,19 @@ impl GpuInterface {
         pipeline_handle: GpuPipelineHandle,
     ) -> HalResult<GpuComputePassHandle> {
         let devices = self.devices.read().await;
-        let _device = devices.get(&device_handle)
+        let _device = devices
+            .get(&device_handle)
             .ok_or_else(|| HalError::NotFound("GPU device not found".to_string()))?;
 
         let pipelines = self.pipelines.read().await;
-        let pipeline = pipelines.get(&pipeline_handle)
+        let pipeline = pipelines
+            .get(&pipeline_handle)
             .ok_or_else(|| HalError::NotFound("GPU pipeline not found".to_string()))?;
 
         if pipeline.device_handle != device_handle {
-            return Err(HalError::InvalidParameter("Pipeline does not belong to the specified device".to_string()));
+            return Err(HalError::InvalidParameter(
+                "Pipeline does not belong to the specified device".to_string(),
+            ));
         }
 
         let mut compute_passes = self.compute_passes.write().await;
@@ -360,11 +410,14 @@ impl GpuInterface {
         workgroups_z: u32,
     ) -> HalResult<()> {
         let mut compute_passes = self.compute_passes.write().await;
-        let compute_pass = compute_passes.get_mut(&compute_pass_handle)
+        let compute_pass = compute_passes
+            .get_mut(&compute_pass_handle)
             .ok_or_else(|| HalError::NotFound("GPU compute pass not found".to_string()))?;
 
         if workgroups_x == 0 || workgroups_y == 0 || workgroups_z == 0 {
-            return Err(HalError::InvalidParameter("Workgroup counts must be > 0".to_string()));
+            return Err(HalError::InvalidParameter(
+                "Workgroup counts must be > 0".to_string(),
+            ));
         }
 
         compute_pass.dispatch_size = [workgroups_x, workgroups_y, workgroups_z];
@@ -373,7 +426,10 @@ impl GpuInterface {
         // For now, we'll simulate the operation
         log::info!(
             "Dispatching compute work: {}x{}x{} workgroups on pass {}",
-            workgroups_x, workgroups_y, workgroups_z, compute_pass_handle
+            workgroups_x,
+            workgroups_y,
+            workgroups_z,
+            compute_pass_handle
         );
 
         Ok(())
@@ -386,11 +442,14 @@ impl GpuInterface {
         descriptor: &GpuBufferDescriptor,
     ) -> HalResult<u64> {
         let devices = self.devices.read().await;
-        let _device = devices.get(&device_handle)
+        let _device = devices
+            .get(&device_handle)
             .ok_or_else(|| HalError::NotFound("GPU device not found".to_string()))?;
 
         if descriptor.size == 0 {
-            return Err(HalError::InvalidParameter("Buffer size must be > 0".to_string()));
+            return Err(HalError::InvalidParameter(
+                "Buffer size must be > 0".to_string(),
+            ));
         }
 
         // In a real implementation, this would create an actual GPU buffer
@@ -447,9 +506,13 @@ impl GpuInterface {
     }
 
     /// Get GPU adapter information
-    pub async fn get_gpu_adapter_info(&self, adapter_handle: GpuAdapterHandle) -> HalResult<GpuAdapterInfo> {
+    pub async fn get_gpu_adapter_info(
+        &self,
+        adapter_handle: GpuAdapterHandle,
+    ) -> HalResult<GpuAdapterInfo> {
         let adapters = self.adapters.read().await;
-        let adapter = adapters.get(&adapter_handle)
+        let adapter = adapters
+            .get(&adapter_handle)
             .ok_or_else(|| HalError::NotFound("GPU adapter not found".to_string()))?;
 
         Ok(GpuAdapterInfo {
@@ -593,10 +656,10 @@ mod tests {
     #[tokio::test]
     async fn test_gpu_adapter_enumeration() {
         let gpu = GpuInterface::new();
-        
+
         let adapters = gpu.get_gpu_adapters().await.unwrap();
         assert!(!adapters.is_empty());
-        
+
         // Should have at least one adapter
         let adapter_handle = adapters[0];
         let info = gpu.get_gpu_adapter_info(adapter_handle).await.unwrap();
@@ -607,10 +670,10 @@ mod tests {
     #[tokio::test]
     async fn test_gpu_device_creation() {
         let gpu = GpuInterface::new();
-        
+
         let adapters = gpu.get_gpu_adapters().await.unwrap();
         let adapter_handle = adapters[0];
-        
+
         let device_handle = gpu.create_gpu_device(adapter_handle).await.unwrap();
         assert!(device_handle > 0);
     }
@@ -618,43 +681,39 @@ mod tests {
     #[tokio::test]
     async fn test_compute_pipeline_creation() {
         let gpu = GpuInterface::new();
-        
+
         let adapters = gpu.get_gpu_adapters().await.unwrap();
         let adapter_handle = adapters[0];
         let device_handle = gpu.create_gpu_device(adapter_handle).await.unwrap();
-        
+
         let shader_code = b"#version 450\nlayout(local_size_x = 1) in;\nvoid main() {}";
-        let pipeline_handle = gpu.create_gpu_compute_pipeline(
-            device_handle,
-            shader_code,
-            "main",
-            [1, 1, 1]
-        ).await.unwrap();
-        
+        let pipeline_handle = gpu
+            .create_gpu_compute_pipeline(device_handle, shader_code, "main", [1, 1, 1])
+            .await
+            .unwrap();
+
         assert!(pipeline_handle > 0);
     }
 
     #[tokio::test]
     async fn test_compute_pass_creation_and_dispatch() {
         let gpu = GpuInterface::new();
-        
+
         let adapters = gpu.get_gpu_adapters().await.unwrap();
         let adapter_handle = adapters[0];
         let device_handle = gpu.create_gpu_device(adapter_handle).await.unwrap();
-        
+
         let shader_code = b"compute shader code";
-        let pipeline_handle = gpu.create_gpu_compute_pipeline(
-            device_handle,
-            shader_code,
-            "main",
-            [8, 8, 1]
-        ).await.unwrap();
-        
-        let compute_pass_handle = gpu.create_gpu_compute_pass(
-            device_handle,
-            pipeline_handle
-        ).await.unwrap();
-        
+        let pipeline_handle = gpu
+            .create_gpu_compute_pipeline(device_handle, shader_code, "main", [8, 8, 1])
+            .await
+            .unwrap();
+
+        let compute_pass_handle = gpu
+            .create_gpu_compute_pass(device_handle, pipeline_handle)
+            .await
+            .unwrap();
+
         let result = gpu.dispatch_compute(compute_pass_handle, 16, 16, 1).await;
         assert!(result.is_ok());
     }
@@ -662,11 +721,11 @@ mod tests {
     #[tokio::test]
     async fn test_gpu_buffer_operations() {
         let gpu = GpuInterface::new();
-        
+
         let adapters = gpu.get_gpu_adapters().await.unwrap();
         let adapter_handle = adapters[0];
         let device_handle = gpu.create_gpu_device(adapter_handle).await.unwrap();
-        
+
         let buffer_desc = GpuBufferDescriptor {
             label: Some("test_buffer".to_string()),
             size: 1024,
@@ -680,48 +739,60 @@ mod tests {
             },
             mapped_at_creation: false,
         };
-        
-        let buffer_handle = gpu.create_gpu_buffer(device_handle, &buffer_desc).await.unwrap();
-        
+
+        let buffer_handle = gpu
+            .create_gpu_buffer(device_handle, &buffer_desc)
+            .await
+            .unwrap();
+
         let test_data = vec![1u8, 2, 3, 4, 5];
-        gpu.write_gpu_buffer(buffer_handle, 0, &test_data).await.unwrap();
-        
-        let read_data = gpu.read_gpu_buffer(buffer_handle, 0, test_data.len() as u64).await.unwrap();
+        gpu.write_gpu_buffer(buffer_handle, 0, &test_data)
+            .await
+            .unwrap();
+
+        let read_data = gpu
+            .read_gpu_buffer(buffer_handle, 0, test_data.len() as u64)
+            .await
+            .unwrap();
         assert_eq!(read_data.len(), test_data.len());
     }
 
     #[tokio::test]
     async fn test_gpu_features() {
         let gpu = GpuInterface::new();
-        
+
         let adapters = gpu.get_gpu_adapters().await.unwrap();
         let adapter_handle = adapters[0];
-        
+
         let features = gpu.read_gpu_adapter_features(adapter_handle).await.unwrap();
         assert!(features.compute_shaders);
-        
+
         // Test feature modification
         let modified_features = GpuFeatures {
             compute_shaders: true,
             storage_buffers: false,
             ..features
         };
-        
-        let result = gpu.set_gpu_adapter_features(adapter_handle, modified_features).await;
+
+        let result = gpu
+            .set_gpu_adapter_features(adapter_handle, modified_features)
+            .await;
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_invalid_operations() {
         let gpu = GpuInterface::new();
-        
+
         // Try to use invalid handles
         let result = gpu.create_gpu_device(999).await;
         assert!(result.is_err());
-        
-        let result = gpu.create_gpu_compute_pipeline(999, b"shader", "main", [1, 1, 1]).await;
+
+        let result = gpu
+            .create_gpu_compute_pipeline(999, b"shader", "main", [1, 1, 1])
+            .await;
         assert!(result.is_err());
-        
+
         let result = gpu.dispatch_compute(999, 1, 1, 1).await;
         assert!(result.is_err());
     }
@@ -729,34 +800,17 @@ mod tests {
     #[tokio::test]
     async fn test_cleanup() {
         let gpu = GpuInterface::new();
-        
+
         // Create some resources
         let adapters = gpu.get_gpu_adapters().await.unwrap();
         let adapter_handle = adapters[0];
         let _device_handle = gpu.create_gpu_device(adapter_handle).await.unwrap();
-        
+
         // Clean up
         gpu.cleanup_gpu_resources().await.unwrap();
-        
+
         // Resources should be cleaned up
         let result = gpu.create_gpu_device(adapter_handle).await;
         assert!(result.is_err());
-    }
-}
-
-impl Default for GpuBufferUsage {
-    fn default() -> Self {
-        Self {
-            map_read: false,
-            map_write: false,
-            copy_src: false,
-            copy_dst: false,
-            index: false,
-            vertex: false,
-            uniform: false,
-            storage: false,
-            indirect: false,
-            query_resolve: false,
-        }
     }
 }

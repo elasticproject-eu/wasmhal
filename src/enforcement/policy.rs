@@ -1,6 +1,6 @@
 // Policy definitions and management
 
-use super::{EntityId, EnforcementError, EnforcementResult};
+use super::{EnforcementError, EnforcementResult, EntityId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -14,7 +14,7 @@ pub struct CapabilitySet {
     pub clock: bool,         // Time operations
     pub storage: bool,       // Storage operations
     pub sockets: bool,       // Network sockets
-    pub gpu: bool,          // GPU compute
+    pub gpu: bool,           // GPU compute
     pub resources: bool,     // Resource allocation
     pub events: bool,        // Event handling
     pub communication: bool, // Inter-component communication
@@ -37,7 +37,7 @@ impl CapabilitySet {
             communication: false,
         }
     }
-    
+
     /// Create a capability set with all capabilities enabled
     pub fn all() -> Self {
         Self {
@@ -54,7 +54,7 @@ impl CapabilitySet {
             communication: true,
         }
     }
-    
+
     /// Check if a specific capability is granted
     pub fn has_capability(&self, cap: &str) -> bool {
         match cap {
@@ -102,13 +102,13 @@ pub struct Quota {
 pub struct EntityPolicy {
     pub entity_id: EntityId,
     pub capabilities: CapabilitySet,
-    
+
     #[serde(default)]
     pub rate_limits: HashMap<String, RateLimit>,
-    
+
     #[serde(default)]
     pub quotas: HashMap<String, Quota>,
-    
+
     /// Whether this entity can grant capabilities to others
     #[serde(default)]
     pub can_grant: bool,
@@ -124,17 +124,17 @@ impl EntityPolicy {
             can_grant: false,
         }
     }
-    
+
     pub fn with_rate_limit(mut self, capability: impl Into<String>, limit: RateLimit) -> Self {
         self.rate_limits.insert(capability.into(), limit);
         self
     }
-    
+
     pub fn with_quota(mut self, capability: impl Into<String>, quota: Quota) -> Self {
         self.quotas.insert(capability.into(), quota);
         self
     }
-    
+
     pub fn as_umbrella(mut self) -> Self {
         self.can_grant = true;
         self
@@ -145,71 +145,69 @@ impl EntityPolicy {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PolicyConfig {
     pub entities: Vec<EntityPolicy>,
-    
+
     #[serde(default)]
     pub umbrella: Option<EntityPolicy>,
 }
 
 /// Policy engine that manages and enforces policies
+#[derive(Default)]
 pub struct PolicyEngine {
     policies: HashMap<EntityId, EntityPolicy>,
     umbrella_id: Option<EntityId>,
 }
 
 impl PolicyEngine {
-    pub fn new() -> Self {
-        Self {
-            policies: HashMap::new(),
-            umbrella_id: None,
-        }
-    }
-    
     /// Load policies from configuration
     pub fn from_config(config: PolicyConfig) -> EnforcementResult<Self> {
-        let mut engine = Self::new();
-        
+        let mut engine = Self::default();
+
         // Load entity policies
         for policy in config.entities {
             engine.add_policy(policy)?;
         }
-        
+
         // Load umbrella policy
         if let Some(umbrella) = config.umbrella {
             let umbrella_id = umbrella.entity_id.clone();
             engine.add_policy(umbrella)?;
             engine.umbrella_id = Some(umbrella_id);
         }
-        
+
         Ok(engine)
     }
-    
+
     /// Add or update a policy
     pub fn add_policy(&mut self, policy: EntityPolicy) -> EnforcementResult<()> {
         self.policies.insert(policy.entity_id.clone(), policy);
         Ok(())
     }
-    
+
     /// Get policy for an entity
     pub fn get_policy(&self, entity_id: &EntityId) -> EnforcementResult<&EntityPolicy> {
         self.policies
             .get(entity_id)
             .ok_or_else(|| EnforcementError::EntityNotFound(entity_id.clone()))
     }
-    
+
     /// Check if entity has a specific capability
-    pub fn check_capability(&self, entity_id: &EntityId, capability: &str) -> EnforcementResult<()> {
+    pub fn check_capability(
+        &self,
+        entity_id: &EntityId,
+        capability: &str,
+    ) -> EnforcementResult<()> {
         let policy = self.get_policy(entity_id)?;
-        
+
         if !policy.capabilities.has_capability(capability) {
             return Err(EnforcementError::CapabilityDenied(
                 capability.to_string(),
                 entity_id.clone(),
             ));
         }
-        
+
         Ok(())
     }
-    
+
     /// Grant a capability to an entity (requires umbrella permission)
     pub fn grant_capability(
         &mut self,
@@ -227,12 +225,13 @@ impl PolicyEngine {
                 ));
             }
         }
-        
+
         // Grant the capability
-        let policy = self.policies
+        let policy = self
+            .policies
             .get_mut(target_id)
             .ok_or_else(|| EnforcementError::EntityNotFound(target_id.clone()))?;
-        
+
         match capability {
             "platform" => policy.capabilities.platform = true,
             "capabilities" => policy.capabilities.capabilities = true,
@@ -245,14 +244,17 @@ impl PolicyEngine {
             "resources" => policy.capabilities.resources = true,
             "events" => policy.capabilities.events = true,
             "communication" => policy.capabilities.communication = true,
-            _ => return Err(EnforcementError::InvalidPolicy(
-                format!("Unknown capability: {}", capability)
-            )),
+            _ => {
+                return Err(EnforcementError::InvalidPolicy(format!(
+                    "Unknown capability: {}",
+                    capability
+                )))
+            }
         }
-        
+
         Ok(())
     }
-    
+
     /// Revoke a capability from an entity
     pub fn revoke_capability(
         &mut self,
@@ -270,12 +272,13 @@ impl PolicyEngine {
                 ));
             }
         }
-        
+
         // Revoke the capability
-        let policy = self.policies
+        let policy = self
+            .policies
             .get_mut(target_id)
             .ok_or_else(|| EnforcementError::EntityNotFound(target_id.clone()))?;
-        
+
         match capability {
             "platform" => policy.capabilities.platform = false,
             "capabilities" => policy.capabilities.capabilities = false,
@@ -288,14 +291,17 @@ impl PolicyEngine {
             "resources" => policy.capabilities.resources = false,
             "events" => policy.capabilities.events = false,
             "communication" => policy.capabilities.communication = false,
-            _ => return Err(EnforcementError::InvalidPolicy(
-                format!("Unknown capability: {}", capability)
-            )),
+            _ => {
+                return Err(EnforcementError::InvalidPolicy(format!(
+                    "Unknown capability: {}",
+                    capability
+                )))
+            }
         }
-        
+
         Ok(())
     }
-    
+
     /// List all entities
     pub fn list_entities(&self) -> Vec<&EntityId> {
         self.policies.keys().collect()
@@ -305,29 +311,26 @@ impl PolicyEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_capability_set() {
         let caps = CapabilitySet::none();
         assert!(!caps.platform);
         assert!(!caps.crypto);
-        
+
         let all_caps = CapabilitySet::all();
         assert!(all_caps.platform);
         assert!(all_caps.crypto);
     }
-    
+
     #[test]
     fn test_policy_engine() {
         let mut engine = PolicyEngine::new();
-        
-        let policy = EntityPolicy::new(
-            EntityId::new("test-entity"),
-            CapabilitySet::none(),
-        );
-        
+
+        let policy = EntityPolicy::new(EntityId::new("test-entity"), CapabilitySet::none());
+
         engine.add_policy(policy).unwrap();
-        
+
         let result = engine.check_capability(&EntityId::new("test-entity"), "platform");
         assert!(result.is_err());
     }

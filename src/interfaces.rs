@@ -7,7 +7,7 @@ pub trait PlatformInterface: Send + Sync {
     fn platform_info(&self) -> Result<(String, String, bool), String>;
 }
 
-/// Capabilities interface trait  
+/// Capabilities interface trait
 pub trait CapabilitiesInterface: Send + Sync {
     fn list_capabilities(&self) -> Result<Vec<(String, bool, String)>, String>;
     fn has_capability(&self, feature_name: &str) -> Result<bool, String>;
@@ -67,33 +67,35 @@ impl HalProvider {
             storage: None,
         }
     }
-    
+
     /// Create with all default implementations loaded
     pub fn with_defaults() -> Self {
         use crate::providers::*;
-        
+
         Self {
-            platform: DefaultPlatformProvider::new().ok().map(|p| Box::new(p) as Box<dyn PlatformInterface>),
-            capabilities: Some(Box::new(DefaultCapabilitiesProvider::new())),
-            crypto: Some(Box::new(DefaultCryptoProvider::new())),
-            random: Some(Box::new(DefaultRandomProvider::new())),
-            clock: Some(Box::new(DefaultClockProvider::new())),
+            platform: DefaultPlatformProvider::new()
+                .ok()
+                .map(|p| Box::new(p) as Box<dyn PlatformInterface>),
+            capabilities: Some(Box::new(DefaultCapabilitiesProvider::default())),
+            crypto: Some(Box::new(DefaultCryptoProvider::default())),
+            random: Some(Box::new(DefaultRandomProvider::default())),
+            clock: Some(Box::new(DefaultClockProvider::default())),
             storage: None, // Optional
         }
     }
-    
+
     /// Builder: Set custom platform implementation
     pub fn with_platform(mut self, platform: Box<dyn PlatformInterface>) -> Self {
         self.platform = Some(platform);
         self
     }
-    
+
     /// Builder: Set custom crypto implementation
     pub fn with_crypto(mut self, crypto: Box<dyn CryptoInterface>) -> Self {
         self.crypto = Some(crypto);
         self
     }
-    
+
     /// Builder: Set custom random implementation
     pub fn with_random(mut self, random: Box<dyn RandomInterface>) -> Self {
         self.random = Some(random);

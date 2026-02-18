@@ -1,11 +1,11 @@
 // Event handling interface - Requirement 10
 
 use crate::error::{HalError, HalResult};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, broadcast, mpsc};
-use tokio::time::{Duration, timeout};
-use serde::{Deserialize, Serialize};
+use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::time::{timeout, Duration};
 
 /// Event handler handle
 pub type EventHandlerHandle = u64;
@@ -14,7 +14,7 @@ pub type EventHandlerHandle = u64;
 pub type EventSubscriptionHandle = u64;
 
 /// Event interface for inter-workload communication
-/// 
+///
 /// In Intel TDX environments, events can be encrypted and signed
 /// using TDX sealing keys for secure inter-TD communication.
 #[derive(Debug)]
@@ -43,10 +43,12 @@ struct EventHandler {
 /// Event subscription
 #[derive(Debug)]
 struct EventSubscription {
+    #[allow(dead_code)]
     handle: EventSubscriptionHandle,
     handler_handle: EventHandlerHandle,
     event_types: Vec<String>,
     subscription_filter: Option<String>,
+    #[allow(dead_code)]
     created_at: u64,
 }
 
@@ -101,14 +103,14 @@ impl EventInterface {
     /// Create a new event interface
     pub fn new() -> Self {
         let (global_sender, global_receiver) = broadcast::channel(10000);
-        
+
         // Detect if running in Intel TDX environment
         let is_tdx_env = crate::platform::is_intel_tdx_available();
-        
+
         if is_tdx_env {
             log::info!("Event interface initialized in Intel TDX secure mode");
         }
-        
+
         Self {
             handlers: Arc::new(RwLock::new(HashMap::new())),
             subscriptions: Arc::new(RwLock::new(HashMap::new())),
@@ -120,7 +122,10 @@ impl EventInterface {
     }
 
     /// Create an event handler
-    pub async fn create_event_handler(&self, config: EventHandlerConfig) -> HalResult<EventHandlerHandle> {
+    pub async fn create_event_handler(
+        &self,
+        config: EventHandlerConfig,
+    ) -> HalResult<EventHandlerHandle> {
         let mut handlers = self.handlers.write().await;
         let mut next_handle = self.next_handle.write().await;
 
@@ -147,7 +152,11 @@ impl EventInterface {
 
         handlers.insert(handle, handler);
 
-        log::info!("Created event handler '{}' with handle {}", config.name, handle);
+        log::info!(
+            "Created event handler '{}' with handle {}",
+            config.name,
+            handle
+        );
         Ok(handle)
     }
 
@@ -158,7 +167,8 @@ impl EventInterface {
         filter: SubscriptionFilter,
     ) -> HalResult<EventSubscriptionHandle> {
         let handlers = self.handlers.read().await;
-        let _handler = handlers.get(&handler_handle)
+        let _handler = handlers
+            .get(&handler_handle)
             .ok_or_else(|| HalError::NotFound("Event handler not found".to_string()))?;
 
         let mut subscriptions = self.subscriptions.write().await;
@@ -198,17 +208,22 @@ impl EventInterface {
         event: Event,
     ) -> HalResult<()> {
         let handlers = self.handlers.read().await;
-        let handler = handlers.get(&handler_handle)
+        let handler = handlers
+            .get(&handler_handle)
             .ok_or_else(|| HalError::NotFound("Event handler not found".to_string()))?;
 
         // Check queue size limits
         let current_size = *handler.current_queue_size.read().await;
         if current_size >= handler.max_queue_size {
-            return Err(HalError::EventError("Event handler queue is full".to_string()));
+            return Err(HalError::EventError(
+                "Event handler queue is full".to_string(),
+            ));
         }
 
         // Send event to handler
-        handler.sender.send(event.clone())
+        handler
+            .sender
+            .send(event.clone())
             .map_err(|_| HalError::EventError("Failed to send event to handler".to_string()))?;
 
         // Update queue size
@@ -222,7 +237,7 @@ impl EventInterface {
     }
 
     /// Send event globally (to all subscribed handlers)
-    /// 
+    ///
     /// In TDX environments, events can be optionally encrypted for
     /// secure cross-Trust Domain communication.
     pub async fn send_event_global(&self, event: Event) -> HalResult<()> {
@@ -237,12 +252,12 @@ impl EventInterface {
                 if let Some(handler) = handlers.get(&subscription.handler_handle) {
                     // Check queue size
                     let current_size = *handler.current_queue_size.read().await;
-                    if current_size < handler.max_queue_size {
-                        if handler.sender.send(event.clone()).is_ok() {
-                            let mut queue_size = handler.current_queue_size.write().await;
-                            *queue_size += 1;
-                            sent_count += 1;
-                        }
+                    if current_size < handler.max_queue_size
+                        && handler.sender.send(event.clone()).is_ok()
+                    {
+                        let mut queue_size = handler.current_queue_size.write().await;
+                        *queue_size += 1;
+                        sent_count += 1;
                     }
                 }
             }
@@ -256,7 +271,7 @@ impl EventInterface {
         } else {
             log::debug!("Sent event to {} handlers", sent_count);
         }
-        
+
         Ok(())
     }
 
@@ -267,7 +282,8 @@ impl EventInterface {
         timeout_ms: Option<u64>,
     ) -> HalResult<Event> {
         let handlers = self.handlers.read().await;
-        let handler = handlers.get(&handler_handle)
+        let handler = handlers
+            .get(&handler_handle)
             .ok_or_else(|| HalError::NotFound("Event handler not found".to_string()))?;
 
         let mut receiver = handler.receiver.write().await;
@@ -278,7 +294,9 @@ impl EventInterface {
                 .map_err(|_| HalError::Timeout("Event receive timeout".to_string()))?
                 .ok_or_else(|| HalError::EventError("Event handler channel closed".to_string()))?
         } else {
-            receiver.recv().await
+            receiver
+                .recv()
+                .await
                 .ok_or_else(|| HalError::EventError("Event handler channel closed".to_string()))?
         };
 
@@ -295,7 +313,8 @@ impl EventInterface {
         handler_handle: EventHandlerHandle,
     ) -> HalResult<Option<Event>> {
         let handlers = self.handlers.read().await;
-        let handler = handlers.get(&handler_handle)
+        let handler = handlers
+            .get(&handler_handle)
             .ok_or_else(|| HalError::NotFound("Event handler not found".to_string()))?;
 
         let mut receiver = handler.receiver.write().await;
@@ -308,9 +327,9 @@ impl EventInterface {
                 Ok(Some(event))
             }
             Err(mpsc::error::TryRecvError::Empty) => Ok(None),
-            Err(mpsc::error::TryRecvError::Disconnected) => {
-                Err(HalError::EventError("Event handler channel closed".to_string()))
-            }
+            Err(mpsc::error::TryRecvError::Disconnected) => Err(HalError::EventError(
+                "Event handler channel closed".to_string(),
+            )),
         }
     }
 
@@ -340,9 +359,13 @@ impl EventInterface {
     }
 
     /// Get event handler information
-    pub async fn get_event_handler_info(&self, handler_handle: EventHandlerHandle) -> HalResult<EventHandlerInfo> {
+    pub async fn get_event_handler_info(
+        &self,
+        handler_handle: EventHandlerHandle,
+    ) -> HalResult<EventHandlerInfo> {
         let handlers = self.handlers.read().await;
-        let handler = handlers.get(&handler_handle)
+        let handler = handlers
+            .get(&handler_handle)
             .ok_or_else(|| HalError::NotFound("Event handler not found".to_string()))?;
 
         let current_queue_size = *handler.current_queue_size.read().await;
@@ -364,7 +387,7 @@ impl EventInterface {
 
         for handler in handlers.values() {
             let current_queue_size = *handler.current_queue_size.read().await;
-            
+
             handler_infos.push(EventHandlerInfo {
                 handle: handler.handle,
                 name: handler.name.clone(),
@@ -384,7 +407,8 @@ impl EventInterface {
         let mut subscriptions = self.subscriptions.write().await;
 
         // Remove handler
-        handlers.remove(&handler_handle)
+        handlers
+            .remove(&handler_handle)
             .ok_or_else(|| HalError::NotFound("Event handler not found".to_string()))?;
 
         // Remove associated subscriptions
@@ -395,10 +419,14 @@ impl EventInterface {
     }
 
     /// Remove event subscription
-    pub async fn remove_event_subscription(&self, subscription_handle: EventSubscriptionHandle) -> HalResult<()> {
+    pub async fn remove_event_subscription(
+        &self,
+        subscription_handle: EventSubscriptionHandle,
+    ) -> HalResult<()> {
         let mut subscriptions = self.subscriptions.write().await;
-        
-        subscriptions.remove(&subscription_handle)
+
+        subscriptions
+            .remove(&subscription_handle)
             .ok_or_else(|| HalError::NotFound("Event subscription not found".to_string()))?;
 
         log::info!("Removed event subscription {}", subscription_handle);
@@ -440,8 +468,9 @@ impl EventInterface {
 
     fn event_matches_subscription(&self, event: &Event, subscription: &EventSubscription) -> bool {
         // Check event type match
-        if !subscription.event_types.is_empty() && 
-           !subscription.event_types.contains(&event.event_type) {
+        if !subscription.event_types.is_empty()
+            && !subscription.event_types.contains(&event.event_type)
+        {
             return false;
         }
 
@@ -484,26 +513,32 @@ impl Default for EventInterface {
 
 // Helper function to use UUID without adding it as a dependency
 mod uuid {
+    use core::fmt;
+
     pub struct Uuid;
-    
-    impl Uuid {
-        pub fn new_v4() -> Self {
-            Self
-        }
-        
-        pub fn to_string(&self) -> String {
+
+    impl fmt::Display for Uuid {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             // Simple UUID-like string generator for testing
             let timestamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos();
-            
-            format!("{:x}-{:x}-{:x}-{:x}", 
+
+            write!(
+                f,
+                "{:x}-{:x}-{:x}-{:x}",
                 timestamp & 0xffffffff,
                 (timestamp >> 32) & 0xffff,
                 (timestamp >> 48) & 0xffff,
                 timestamp >> 64
             )
+        }
+    }
+
+    impl Uuid {
+        pub fn new_v4() -> Self {
+            Self
         }
     }
 }
@@ -515,7 +550,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_handler_creation() {
         let event_interface = EventInterface::new();
-        
+
         let config = EventHandlerConfig {
             name: "test_handler".to_string(),
             event_types: vec!["test_event".to_string()],
@@ -525,7 +560,10 @@ mod tests {
         let handle = event_interface.create_event_handler(config).await.unwrap();
         assert!(handle > 0);
 
-        let info = event_interface.get_event_handler_info(handle).await.unwrap();
+        let info = event_interface
+            .get_event_handler_info(handle)
+            .await
+            .unwrap();
         assert_eq!(info.name, "test_handler");
         assert_eq!(info.event_types, vec!["test_event"]);
     }
@@ -533,7 +571,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_subscription() {
         let event_interface = EventInterface::new();
-        
+
         let config = EventHandlerConfig {
             name: "test_handler".to_string(),
             event_types: vec!["test_event".to_string()],
@@ -560,7 +598,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_sending_and_receiving() {
         let event_interface = EventInterface::new();
-        
+
         let config = EventHandlerConfig {
             name: "test_handler".to_string(),
             event_types: vec!["test_event".to_string()],
@@ -597,7 +635,7 @@ mod tests {
     #[tokio::test]
     async fn test_global_event_sending() {
         let event_interface = EventInterface::new();
-        
+
         // Create two handlers
         let config1 = EventHandlerConfig {
             name: "handler1".to_string(),
@@ -660,7 +698,7 @@ mod tests {
     #[tokio::test]
     async fn test_event_handler_listing() {
         let event_interface = EventInterface::new();
-        
+
         let config1 = EventHandlerConfig {
             name: "handler1".to_string(),
             event_types: vec!["event1".to_string()],
@@ -687,7 +725,7 @@ mod tests {
     #[tokio::test]
     async fn test_queue_size_limits() {
         let event_interface = EventInterface::new();
-        
+
         let config = EventHandlerConfig {
             name: "limited_handler".to_string(),
             event_types: vec!["test_event".to_string()],
@@ -721,17 +759,26 @@ mod tests {
         );
 
         // First two events should succeed
-        assert!(event_interface.send_event_to_handler(handler_handle, event1).await.is_ok());
-        assert!(event_interface.send_event_to_handler(handler_handle, event2).await.is_ok());
+        assert!(event_interface
+            .send_event_to_handler(handler_handle, event1)
+            .await
+            .is_ok());
+        assert!(event_interface
+            .send_event_to_handler(handler_handle, event2)
+            .await
+            .is_ok());
 
         // Third event should fail due to queue limit
-        assert!(event_interface.send_event_to_handler(handler_handle, event3).await.is_err());
+        assert!(event_interface
+            .send_event_to_handler(handler_handle, event3)
+            .await
+            .is_err());
     }
 
     #[tokio::test]
     async fn test_event_statistics() {
         let event_interface = EventInterface::new();
-        
+
         let config = EventHandlerConfig {
             name: "stats_handler".to_string(),
             event_types: vec!["stats_event".to_string()],

@@ -9,7 +9,7 @@ interface platform {
     version: string,
     attestation-support: bool,
   }
-  
+
   attestation: func(report-data: list<u8>) -> result<list<u8>, string>;
   get-platform-info: func() -> platform-info;
 }
