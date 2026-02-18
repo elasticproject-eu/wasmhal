@@ -106,7 +106,7 @@ impl RandomInterface {
 
     /// Generate random salt for password hashing
     pub fn generate_salt(&self, length: usize) -> HalResult<Vec<u8>> {
-        if length < 16 || length > 64 {
+        if (16..=64).contains(&length) {
             return Err(HalError::InvalidParameter(
                 "Salt length must be between 16 and 64 bytes".to_string(),
             ));
@@ -117,7 +117,7 @@ impl RandomInterface {
 
     /// Generate cryptographically secure random key material
     pub fn generate_key_material(&self, length: usize) -> HalResult<Vec<u8>> {
-        if length < 16 || length > 256 {
+        if !(16..=256).contains(&length) {
             return Err(HalError::InvalidParameter(
                 "Key material length must be between 16 and 256 bytes".to_string(),
             ));
@@ -128,7 +128,7 @@ impl RandomInterface {
 
     /// Test randomness quality (basic entropy check)
     pub fn test_randomness_quality(&self, sample_size: usize) -> HalResult<f64> {
-        if sample_size < 1000 || sample_size > 100_000 {
+        if !(1000..=100_000).contains(&sample_size) {
             return Err(HalError::InvalidParameter(
                 "Sample size must be between 1000 and 100000 bytes".to_string(),
             ));

@@ -271,7 +271,7 @@ impl ElasticTeeHal {
     ///
     /// # Arguments
     /// * `report_data` - Custom data to include in the attestation report (e.g., nonce, challenge)
-    ///                   For TDX, this should be up to 64 bytes. For SEV-SNP, up to 64 bytes.
+    ///   For TDX, this should be up to 64 bytes. For SEV-SNP, up to 64 bytes.
     pub async fn attest(&self, report_data: &[u8]) -> HalResult<Vec<u8>> {
         if !self.initialized {
             return Err(HalError::TeeInitializationFailed(

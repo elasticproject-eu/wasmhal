@@ -141,7 +141,7 @@ pub struct GpuBufferDescriptor {
 }
 
 /// GPU buffer usage flags
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct GpuBufferUsage {
     pub map_read: bool,
     pub map_write: bool,
@@ -812,22 +812,5 @@ mod tests {
         // Resources should be cleaned up
         let result = gpu.create_gpu_device(adapter_handle).await;
         assert!(result.is_err());
-    }
-}
-
-impl Default for GpuBufferUsage {
-    fn default() -> Self {
-        Self {
-            map_read: false,
-            map_write: false,
-            copy_src: false,
-            copy_dst: false,
-            index: false,
-            vertex: false,
-            uniform: false,
-            storage: false,
-            indirect: false,
-            query_resolve: false,
-        }
     }
 }
