@@ -3,14 +3,14 @@
 // Works in TEE environments including Intel TDX with standard filesystem access
 // TDX protects storage data in memory; this layer adds AES-GCM encryption at rest
 
-use crate::error::{HalError, HalResult};
 use crate::crypto::CryptoInterface;
+use crate::error::{HalError, HalResult};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tokio::fs;
-use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
 /// Storage container handle
 pub type ContainerHandle = u64;
@@ -63,11 +63,12 @@ impl StorageInterface {
     /// Create a new storage interface
     pub async fn new(base_path: impl AsRef<Path>) -> HalResult<Self> {
         let base_path = base_path.as_ref().to_path_buf();
-        
+
         // Create base directory if it doesn't exist
         if !base_path.exists() {
-            fs::create_dir_all(&base_path).await
-                .map_err(|e| HalError::StorageError(format!("Failed to create storage directory: {}", e)))?;
+            fs::create_dir_all(&base_path).await.map_err(|e| {
+                HalError::StorageError(format!("Failed to create storage directory: {}", e))
+            })?;
         }
 
         Ok(Self {
@@ -105,8 +106,9 @@ impl StorageInterface {
         *next_handle += 1;
 
         let container_path = self.base_path.join(format!("container_{}", handle));
-        fs::create_dir_all(&container_path).await
-            .map_err(|e| HalError::StorageError(format!("Failed to create container directory: {}", e)))?;
+        fs::create_dir_all(&container_path).await.map_err(|e| {
+            HalError::StorageError(format!("Failed to create container directory: {}", e))
+        })?;
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -148,7 +150,8 @@ impl StorageInterface {
         key: &str,
     ) -> HalResult<Vec<u8>> {
         let containers = self.containers.read().await;
-        let container = containers.get(&container_handle)
+        let container = containers
+            .get(&container_handle)
             .ok_or_else(|| HalError::NotFound("Container not found".to_string()))?;
 
         let object_path = container.path.join(format!("{}.obj", key));
@@ -156,7 +159,8 @@ impl StorageInterface {
             return Err(HalError::NotFound(format!("Object '{}' not found", key)));
         }
 
-        let data = fs::read(&object_path).await
+        let data = fs::read(&object_path)
+            .await
             .map_err(|e| HalError::StorageError(format!("Failed to read object: {}", e)))?;
 
         // Decrypt if container is encrypted
@@ -177,7 +181,8 @@ impl StorageInterface {
         data: &[u8],
     ) -> HalResult<()> {
         let mut containers = self.containers.write().await;
-        let container = containers.get_mut(&container_handle)
+        let container = containers
+            .get_mut(&container_handle)
             .ok_or_else(|| HalError::NotFound("Container not found".to_string()))?;
 
         let object_path = container.path.join(format!("{}.obj", key));
@@ -188,14 +193,17 @@ impl StorageInterface {
             if let Some(ref encryption_key) = container.encryption_key {
                 self.encrypt_object_data(data, encryption_key).await?
             } else {
-                return Err(HalError::StorageError("Container is encrypted but no key available".to_string()));
+                return Err(HalError::StorageError(
+                    "Container is encrypted but no key available".to_string(),
+                ));
             }
         } else {
             data.to_vec()
         };
 
         // Write object data
-        fs::write(&object_path, &final_data).await
+        fs::write(&object_path, &final_data)
+            .await
             .map_err(|e| HalError::StorageError(format!("Failed to write object: {}", e)))?;
 
         // Create object metadata
@@ -215,7 +223,8 @@ impl StorageInterface {
 
         // Write metadata
         let metadata_json = serde_json::to_string(&object_metadata)?;
-        fs::write(&metadata_path, metadata_json).await
+        fs::write(&metadata_path, metadata_json)
+            .await
             .map_err(|e| HalError::StorageError(format!("Failed to write metadata: {}", e)))?;
 
         // Update container metadata
@@ -235,19 +244,20 @@ impl StorageInterface {
         key_data: &[u8],
     ) -> HalResult<()> {
         let mut containers = self.containers.write().await;
-        let container = containers.get_mut(&container_handle)
+        let container = containers
+            .get_mut(&container_handle)
             .ok_or_else(|| HalError::NotFound("Container not found".to_string()))?;
 
         if !container.encrypted {
             return Err(HalError::InvalidParameter(
-                "Container is not encrypted".to_string()
+                "Container is not encrypted".to_string(),
             ));
         }
 
         // Validate key length
         if key_data.len() != 32 {
             return Err(HalError::InvalidParameter(
-                "Encryption key must be 32 bytes".to_string()
+                "Encryption key must be 32 bytes".to_string(),
             ));
         }
 
@@ -262,7 +272,8 @@ impl StorageInterface {
         key: &str,
     ) -> HalResult<()> {
         let mut containers = self.containers.write().await;
-        let container = containers.get_mut(&container_handle)
+        let container = containers
+            .get_mut(&container_handle)
             .ok_or_else(|| HalError::NotFound("Container not found".to_string()))?;
 
         let object_path = container.path.join(format!("{}.obj", key));
@@ -275,17 +286,20 @@ impl StorageInterface {
         // Read metadata to get object size
         if let Ok(metadata_content) = fs::read_to_string(&metadata_path).await {
             if let Ok(metadata) = serde_json::from_str::<ObjectMetadata>(&metadata_content) {
-                container.metadata.total_size = container.metadata.total_size.saturating_sub(metadata.size);
+                container.metadata.total_size =
+                    container.metadata.total_size.saturating_sub(metadata.size);
                 container.metadata.object_count = container.metadata.object_count.saturating_sub(1);
             }
         }
 
         // Delete files
-        fs::remove_file(&object_path).await
+        fs::remove_file(&object_path)
+            .await
             .map_err(|e| HalError::StorageError(format!("Failed to delete object: {}", e)))?;
-        
+
         if metadata_path.exists() {
-            fs::remove_file(&metadata_path).await
+            fs::remove_file(&metadata_path)
+                .await
                 .map_err(|e| HalError::StorageError(format!("Failed to delete metadata: {}", e)))?;
         }
 
@@ -304,16 +318,20 @@ impl StorageInterface {
     /// List objects in container
     pub async fn list_objects(&self, container_handle: ContainerHandle) -> HalResult<Vec<String>> {
         let containers = self.containers.read().await;
-        let container = containers.get(&container_handle)
+        let container = containers
+            .get(&container_handle)
             .ok_or_else(|| HalError::NotFound("Container not found".to_string()))?;
 
         let mut objects = Vec::new();
-        let mut entries = fs::read_dir(&container.path).await
-            .map_err(|e| HalError::StorageError(format!("Failed to read container directory: {}", e)))?;
+        let mut entries = fs::read_dir(&container.path).await.map_err(|e| {
+            HalError::StorageError(format!("Failed to read container directory: {}", e))
+        })?;
 
-        while let Some(entry) = entries.next_entry().await
-            .map_err(|e| HalError::StorageError(format!("Failed to read directory entry: {}", e)))? {
-            
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| HalError::StorageError(format!("Failed to read directory entry: {}", e)))?
+        {
             if let Some(file_name) = entry.file_name().to_str() {
                 if file_name.ends_with(".obj") {
                     let object_key = file_name.strip_suffix(".obj").unwrap().to_string();
@@ -326,9 +344,13 @@ impl StorageInterface {
     }
 
     /// Get container metadata
-    pub async fn get_container_metadata(&self, container_handle: ContainerHandle) -> HalResult<ContainerMetadata> {
+    pub async fn get_container_metadata(
+        &self,
+        container_handle: ContainerHandle,
+    ) -> HalResult<ContainerMetadata> {
         let containers = self.containers.read().await;
-        let container = containers.get(&container_handle)
+        let container = containers
+            .get(&container_handle)
             .ok_or_else(|| HalError::NotFound("Container not found".to_string()))?;
 
         Ok(container.metadata.clone())
@@ -356,18 +378,21 @@ impl StorageInterface {
 
     async fn encrypt_object_data(&self, data: &[u8], key: &[u8]) -> HalResult<Vec<u8>> {
         if let Some(ref crypto) = self.crypto {
-            crypto.symmetric_encrypt("AES-256-GCM", key, data, None).await
+            crypto
+                .symmetric_encrypt("AES-256-GCM", key, data, None)
+                .await
         } else {
             // Simple AES-GCM encryption as fallback
-            use aes_gcm::{Aes256Gcm, KeyInit, Key};
-            use aes_gcm::aead::{Aead, generic_array::GenericArray};
+            use aes_gcm::aead::{generic_array::GenericArray, Aead};
+            use aes_gcm::{Aes256Gcm, KeyInit};
 
             let key_array = GenericArray::from_slice(key);
             let cipher = Aes256Gcm::new(key_array);
             let nonce_bytes = crate::random::RandomInterface::new().generate_nonce(12)?;
             let nonce = aes_gcm::Nonce::from_slice(&nonce_bytes);
-            
-            let ciphertext = cipher.encrypt(nonce, data)
+
+            let ciphertext = cipher
+                .encrypt(nonce, data)
                 .map_err(|_| HalError::CryptographicError("Encryption failed".to_string()))?;
 
             // Prepend nonce to ciphertext
@@ -379,22 +404,27 @@ impl StorageInterface {
 
     async fn decrypt_object_data(&self, data: &[u8], key: &[u8]) -> HalResult<Vec<u8>> {
         if let Some(ref crypto) = self.crypto {
-            crypto.symmetric_decrypt("AES-256-GCM", key, data, None).await
+            crypto
+                .symmetric_decrypt("AES-256-GCM", key, data, None)
+                .await
         } else {
             // Simple AES-GCM decryption as fallback
+            use aes_gcm::aead::{generic_array::GenericArray, Aead};
             use aes_gcm::{Aes256Gcm, KeyInit};
-            use aes_gcm::aead::{Aead, generic_array::GenericArray};
 
             if data.len() < 12 {
-                return Err(HalError::CryptographicError("Invalid encrypted data".to_string()));
+                return Err(HalError::CryptographicError(
+                    "Invalid encrypted data".to_string(),
+                ));
             }
 
             let key_array = GenericArray::from_slice(key);
             let cipher = Aes256Gcm::new(key_array);
             let nonce = aes_gcm::Nonce::from_slice(&data[..12]);
             let ciphertext = &data[12..];
-            
-            let plaintext = cipher.decrypt(nonce, ciphertext)
+
+            let plaintext = cipher
+                .decrypt(nonce, ciphertext)
                 .map_err(|_| HalError::CryptographicError("Decryption failed".to_string()))?;
 
             Ok(plaintext)
@@ -404,10 +434,13 @@ impl StorageInterface {
     async fn save_container_metadata(&self, container: &Container) -> HalResult<()> {
         let metadata_path = container.path.join("container.meta");
         let metadata_json = serde_json::to_string_pretty(&container.metadata)?;
-        
-        fs::write(&metadata_path, metadata_json).await
-            .map_err(|e| HalError::StorageError(format!("Failed to save container metadata: {}", e)))?;
-        
+
+        fs::write(&metadata_path, metadata_json)
+            .await
+            .map_err(|e| {
+                HalError::StorageError(format!("Failed to save container metadata: {}", e))
+            })?;
+
         Ok(())
     }
 }
@@ -428,11 +461,17 @@ mod tests {
         let (storage, _temp_dir) = create_test_storage().await;
 
         // Open container
-        let handle = storage.open_container("test_container", false).await.unwrap();
+        let handle = storage
+            .open_container("test_container", false)
+            .await
+            .unwrap();
         assert!(handle > 0);
 
         // Open same container again (should return same handle)
-        let handle2 = storage.open_container("test_container", false).await.unwrap();
+        let handle2 = storage
+            .open_container("test_container", false)
+            .await
+            .unwrap();
         assert_eq!(handle, handle2);
     }
 
@@ -440,11 +479,17 @@ mod tests {
     async fn test_object_operations() {
         let (storage, _temp_dir) = create_test_storage().await;
 
-        let handle = storage.open_container("test_container", false).await.unwrap();
+        let handle = storage
+            .open_container("test_container", false)
+            .await
+            .unwrap();
 
         // Write object
         let test_data = b"Hello, World!";
-        storage.write_object(handle, "test_key", test_data).await.unwrap();
+        storage
+            .write_object(handle, "test_key", test_data)
+            .await
+            .unwrap();
 
         // Read object
         let read_data = storage.read_object(handle, "test_key").await.unwrap();
@@ -464,11 +509,17 @@ mod tests {
     async fn test_encrypted_container() {
         let (storage, _temp_dir) = create_test_storage().await;
 
-        let handle = storage.open_container("encrypted_container", true).await.unwrap();
+        let handle = storage
+            .open_container("encrypted_container", true)
+            .await
+            .unwrap();
 
         // Write and read encrypted object
         let test_data = b"Secret data";
-        storage.write_object(handle, "secret_key", test_data).await.unwrap();
+        storage
+            .write_object(handle, "secret_key", test_data)
+            .await
+            .unwrap();
 
         let read_data = storage.read_object(handle, "secret_key").await.unwrap();
         assert_eq!(read_data, test_data);
@@ -478,7 +529,10 @@ mod tests {
     async fn test_object_not_found() {
         let (storage, _temp_dir) = create_test_storage().await;
 
-        let handle = storage.open_container("test_container", false).await.unwrap();
+        let handle = storage
+            .open_container("test_container", false)
+            .await
+            .unwrap();
 
         // Try to read non-existent object
         let result = storage.read_object(handle, "non_existent").await;
@@ -490,7 +544,10 @@ mod tests {
     async fn test_container_metadata() {
         let (storage, _temp_dir) = create_test_storage().await;
 
-        let handle = storage.open_container("test_container", false).await.unwrap();
+        let handle = storage
+            .open_container("test_container", false)
+            .await
+            .unwrap();
 
         // Check initial metadata
         let metadata = storage.get_container_metadata(handle).await.unwrap();
@@ -500,7 +557,10 @@ mod tests {
 
         // Add object and check metadata update
         let test_data = b"Test data";
-        storage.write_object(handle, "test", test_data).await.unwrap();
+        storage
+            .write_object(handle, "test", test_data)
+            .await
+            .unwrap();
 
         let metadata = storage.get_container_metadata(handle).await.unwrap();
         assert_eq!(metadata.object_count, 1);

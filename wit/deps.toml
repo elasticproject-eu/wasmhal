@@ -4,6 +4,6 @@
 
 # WASI 0.2 standard interfaces
 "wasi:clocks" = "https://github.com/WebAssembly/wasi-clocks"
-"wasi:random" = "https://github.com/WebAssembly/wasi-random"  
+"wasi:random" = "https://github.com/WebAssembly/wasi-random"
 "wasi:io" = "https://github.com/WebAssembly/wasi-io"
 "wasi:sockets" = "https://github.com/WebAssembly/wasi-sockets"

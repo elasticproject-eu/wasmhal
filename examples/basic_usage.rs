@@ -1,6 +1,5 @@
 use elastic_tee_hal::{
-    ElasticTeeHal, CryptoInterface, StorageInterface, PlatformInterface,
-    HalResult
+    CryptoInterface, ElasticTeeHal, HalResult, PlatformInterface, StorageInterface,
 };
 
 #[tokio::main]
@@ -12,7 +11,10 @@ async fn main() -> HalResult<()> {
     // Get platform information
     let platform = hal.platform();
     let platform_info = platform.get_platform_info().await?;
-    println!("Platform: {} v{}", platform_info.platform_type, platform_info.version);
+    println!(
+        "Platform: {} v{}",
+        platform_info.platform_type, platform_info.version
+    );
 
     // Generate attestation
     if platform_info.attestation_support {
@@ -23,7 +25,10 @@ async fn main() -> HalResult<()> {
     // Test cryptographic operations
     let crypto = hal.crypto();
     let key_pair = crypto.generate_keypair().await?;
-    println!("Generated key pair: {} byte public key", key_pair.public_key.len());
+    println!(
+        "Generated key pair: {} byte public key",
+        key_pair.public_key.len()
+    );
 
     // Test secure storage
     let storage = hal.storage();
@@ -31,7 +36,9 @@ async fn main() -> HalResult<()> {
     println!("Created storage container: {:?}", container);
 
     let data = b"Hello, TEE World!";
-    let object_id = storage.store_object(container, "greeting", data.to_vec()).await?;
+    let object_id = storage
+        .store_object(container, "greeting", data.to_vec())
+        .await?;
     println!("Stored object: {:?}", object_id);
 
     let retrieved = storage.retrieve_object(container, "greeting").await?;

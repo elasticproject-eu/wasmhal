@@ -9,7 +9,7 @@ interface platform {
     version: string,
     attestation-support: bool,
   }
-  
+
   attestation: func(report-data: list<u8>) -> result<list<u8>, string>;
   platform-info: func() -> platform-info;
 }
@@ -20,30 +20,30 @@ interface capabilities {
     supported: bool,
     version: string,
   }
-  
+
   list-capabilities: func() -> list<capability-info>;
   has-capability: func(feature-name: string) -> bool;
 }
 
 interface crypto {
   type crypto-context-handle = u64;
-  
+
   enum hash-algorithm {
     sha256,
     sha512,
     blake3,
   }
-  
+
   enum cipher-algorithm {
     aes256-gcm,
     chacha20-poly1305,
   }
-  
+
   record key-pair {
     public-key: list<u8>,
     private-key: list<u8>,
   }
-  
+
   hash: func(data: list<u8>, algorithm: hash-algorithm) -> result<list<u8>, string>;
   encrypt: func(data: list<u8>, key: list<u8>, algorithm: cipher-algorithm) -> result<list<u8>, string>;
   decrypt: func(data: list<u8>, key: list<u8>, algorithm: cipher-algorithm) -> result<list<u8>, string>;
@@ -57,13 +57,13 @@ interface crypto {
 interface storage {
   type container-handle = u64;
   type object-handle = u64;
-  
+
   record object-metadata {
     size: u64,
     created-at: u64,
     content-type: string,
   }
-  
+
   create-container: func(name: string) -> result<container-handle, string>;
   open-container: func(name: string) -> result<container-handle, string>;
   delete-container: func(handle: container-handle) -> result<unit, string>;
@@ -76,19 +76,19 @@ interface storage {
 
 interface sockets {
   type socket-handle = u64;
-  
+
   enum protocol {
     tcp,
     udp,
     tls,
     dtls,
   }
-  
+
   record address {
     ip: string,
     port: u16,
   }
-  
+
   create-socket: func(protocol: protocol) -> result<socket-handle, string>;
   bind: func(socket: socket-handle, addr: address) -> result<unit, string>;
   listen: func(socket: socket-handle, backlog: u32) -> result<unit, string>;
@@ -104,25 +104,25 @@ interface gpu {
   type gpu-device-handle = u64;
   type gpu-buffer-handle = u64;
   type gpu-pipeline-handle = u64;
-  
+
   enum buffer-usage {
     storage,
     uniform,
     vertex,
     index,
   }
-  
+
   record adapter-info {
     name: string,
     vendor: string,
     device-type: string,
   }
-  
+
   record buffer-descriptor {
     size: u64,
     usage: buffer-usage,
   }
-  
+
   list-adapters: func() -> result<list<gpu-adapter-handle>, string>;
   get-adapter-info: func(handle: gpu-adapter-handle) -> result<adapter-info, string>;
   create-device: func(adapter: gpu-adapter-handle) -> result<gpu-device-handle, string>;
@@ -135,25 +135,25 @@ interface gpu {
 
 interface resources {
   type allocation-id = string;
-  
+
   enum resource-type {
     memory,
     cpu,
     storage,
     network,
   }
-  
+
   record allocation-request {
     resource-type: resource-type,
     amount: u64,
     priority: u32,
   }
-  
+
   record allocation-response {
     allocation-id: allocation-id,
     granted-amount: u64,
   }
-  
+
   allocate: func(request: allocation-request) -> result<allocation-response, string>;
   deallocate: func(id: allocation-id) -> result<unit, string>;
   query-available: func(resource-type: resource-type) -> result<u64, string>;
@@ -161,7 +161,7 @@ interface resources {
 
 interface events {
   type event-subscription-handle = u64;
-  
+
   enum event-type {
     platform,
     crypto,
@@ -169,13 +169,13 @@ interface events {
     network,
     gpu,
   }
-  
+
   record event-data {
     event-type: event-type,
     timestamp: u64,
     payload: list<u8>,
   }
-  
+
   subscribe: func(event-type: event-type) -> result<event-subscription-handle, string>;
   unsubscribe: func(handle: event-subscription-handle) -> result<unit, string>;
   poll-events: func(handle: event-subscription-handle) -> result<list<event-data>, string>;
@@ -184,14 +184,14 @@ interface events {
 interface communication {
   type workload-id = string;
   type message-handle = u64;
-  
+
   record message {
     sender: workload-id,
     recipient: workload-id,
     payload: list<u8>,
     encrypted: bool,
   }
-  
+
   send-message: func(recipient: workload-id, data: list<u8>, encrypt: bool) -> result<message-handle, string>;
   receive-message: func() -> result<option<message>, string>;
   list-workloads: func() -> result<list<workload-id>, string>;
@@ -202,12 +202,12 @@ interface clock {
     seconds: u64,
     nanoseconds: u32,
   }
-  
+
   record monotonic-time {
     elapsed-seconds: u64,
     elapsed-nanoseconds: u32,
   }
-  
+
   system-time: func() -> result<system-time, string>;
   monotonic-time: func() -> result<monotonic-time, string>;
   resolution: func() -> result<u64, string>;
@@ -220,13 +220,13 @@ interface random {
     platform,
     userspace,
   }
-  
+
   record entropy-info {
     source: entropy-source,
     quality: u32,
     available-bytes: u64,
   }
-  
+
   get-random-bytes: func(length: u32) -> result<list<u8>, string>;
   get-secure-random: func(length: u32) -> result<list<u8>, string>;
   get-entropy-info: func() -> result<entropy-info, string>;

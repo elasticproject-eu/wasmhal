@@ -1,10 +1,10 @@
 // Resource allocation interface - Requirement 9
 
 use crate::error::{HalError, HalResult};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 
 /// Resource allocation interface
 #[derive(Debug)]
@@ -16,7 +16,7 @@ pub struct ResourceInterface {
 
 /// Resource allocation entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct ResourceAllocation {
+pub struct ResourceAllocation {
     allocation_id: String,
     resource_type: ResourceType,
     amount: u64,
@@ -27,11 +27,11 @@ struct ResourceAllocation {
 /// Resource type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResourceType {
-    Memory,    // Memory in MB
-    CpuCores,  // Number of CPU cores
-    Storage,   // Storage in MB
+    Memory,           // Memory in MB
+    CpuCores,         // Number of CPU cores
+    Storage,          // Storage in MB
     NetworkBandwidth, // Network bandwidth in Mbps
-    GpuMemory, // GPU memory in MB
+    GpuMemory,        // GPU memory in MB
 }
 
 /// System resource limits
@@ -85,7 +85,7 @@ impl ResourceInterface {
     /// Create a new resource interface with system limits
     pub fn new() -> HalResult<Self> {
         let limits = Self::detect_system_limits()?;
-        
+
         Ok(Self {
             allocations: Arc::new(RwLock::new(HashMap::new())),
             total_limits: limits,
@@ -126,7 +126,11 @@ impl ResourceInterface {
     }
 
     /// Request additional RAM memory
-    pub async fn request_additional_memory(&self, memory_mb: u64, requester: &str) -> HalResult<AllocationResult> {
+    pub async fn request_additional_memory(
+        &self,
+        memory_mb: u64,
+        requester: &str,
+    ) -> HalResult<AllocationResult> {
         let request = ResourceRequest {
             resource_type: ResourceType::Memory,
             amount: memory_mb,
@@ -139,7 +143,11 @@ impl ResourceInterface {
     }
 
     /// Request additional CPU allocations
-    pub async fn request_additional_cpu(&self, cpu_cores: u32, requester: &str) -> HalResult<AllocationResult> {
+    pub async fn request_additional_cpu(
+        &self,
+        cpu_cores: u32,
+        requester: &str,
+    ) -> HalResult<AllocationResult> {
         let request = ResourceRequest {
             resource_type: ResourceType::CpuCores,
             amount: cpu_cores as u64,
@@ -152,7 +160,11 @@ impl ResourceInterface {
     }
 
     /// Request storage allocation
-    pub async fn request_storage(&self, storage_mb: u64, requester: &str) -> HalResult<AllocationResult> {
+    pub async fn request_storage(
+        &self,
+        storage_mb: u64,
+        requester: &str,
+    ) -> HalResult<AllocationResult> {
         let request = ResourceRequest {
             resource_type: ResourceType::Storage,
             amount: storage_mb,
@@ -165,7 +177,11 @@ impl ResourceInterface {
     }
 
     /// Request network bandwidth allocation
-    pub async fn request_network_bandwidth(&self, bandwidth_mbps: u64, requester: &str) -> HalResult<AllocationResult> {
+    pub async fn request_network_bandwidth(
+        &self,
+        bandwidth_mbps: u64,
+        requester: &str,
+    ) -> HalResult<AllocationResult> {
         let request = ResourceRequest {
             resource_type: ResourceType::NetworkBandwidth,
             amount: bandwidth_mbps,
@@ -178,7 +194,11 @@ impl ResourceInterface {
     }
 
     /// Request GPU memory allocation
-    pub async fn request_gpu_memory(&self, gpu_memory_mb: u64, requester: &str) -> HalResult<AllocationResult> {
+    pub async fn request_gpu_memory(
+        &self,
+        gpu_memory_mb: u64,
+        requester: &str,
+    ) -> HalResult<AllocationResult> {
         let request = ResourceRequest {
             resource_type: ResourceType::GpuMemory,
             amount: gpu_memory_mb,
@@ -212,7 +232,8 @@ impl ResourceInterface {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_secs() + timeout
+                .as_secs()
+                + timeout
         });
 
         // Update resource usage
@@ -267,8 +288,9 @@ impl ResourceInterface {
         let mut allocations = self.allocations.write().await;
         let mut usage = self.current_usage.write().await;
 
-        let allocation = allocations.remove(allocation_id)
-            .ok_or_else(|| HalError::NotFound(format!("Allocation '{}' not found", allocation_id)))?;
+        let allocation = allocations.remove(allocation_id).ok_or_else(|| {
+            HalError::NotFound(format!("Allocation '{}' not found", allocation_id))
+        })?;
 
         // Update resource usage
         match allocation.resource_type {
@@ -282,7 +304,9 @@ impl ResourceInterface {
                 usage.storage_mb = usage.storage_mb.saturating_sub(allocation.amount);
             }
             ResourceType::NetworkBandwidth => {
-                usage.network_bandwidth_mbps = usage.network_bandwidth_mbps.saturating_sub(allocation.amount);
+                usage.network_bandwidth_mbps = usage
+                    .network_bandwidth_mbps
+                    .saturating_sub(allocation.amount);
             }
             ResourceType::GpuMemory => {
                 usage.gpu_memory_mb = usage.gpu_memory_mb.saturating_sub(allocation.amount);
@@ -302,8 +326,9 @@ impl ResourceInterface {
     /// Get allocation information
     pub async fn get_allocation_info(&self, allocation_id: &str) -> HalResult<ResourceAllocation> {
         let allocations = self.allocations.read().await;
-        let allocation = allocations.get(allocation_id)
-            .ok_or_else(|| HalError::NotFound(format!("Allocation '{}' not found", allocation_id)))?;
+        let allocation = allocations.get(allocation_id).ok_or_else(|| {
+            HalError::NotFound(format!("Allocation '{}' not found", allocation_id))
+        })?;
 
         Ok(allocation.clone())
     }
@@ -315,7 +340,10 @@ impl ResourceInterface {
     }
 
     /// List allocations by requester
-    pub async fn list_allocations_by_requester(&self, requester: &str) -> HalResult<Vec<ResourceAllocation>> {
+    pub async fn list_allocations_by_requester(
+        &self,
+        requester: &str,
+    ) -> HalResult<Vec<ResourceAllocation>> {
         let allocations = self.allocations.read().await;
         let filtered: Vec<ResourceAllocation> = allocations
             .values()
@@ -385,7 +413,11 @@ impl ResourceInterface {
 
     // Private helper methods
 
-    fn check_resource_availability(&self, request: &ResourceRequest, usage: &ResourceUsage) -> HalResult<bool> {
+    fn check_resource_availability(
+        &self,
+        request: &ResourceRequest,
+        usage: &ResourceUsage,
+    ) -> HalResult<bool> {
         match request.resource_type {
             ResourceType::Memory => {
                 Ok(usage.memory_mb + request.amount <= self.total_limits.max_memory_mb)
@@ -396,9 +428,8 @@ impl ResourceInterface {
             ResourceType::Storage => {
                 Ok(usage.storage_mb + request.amount <= self.total_limits.max_storage_mb)
             }
-            ResourceType::NetworkBandwidth => {
-                Ok(usage.network_bandwidth_mbps + request.amount <= self.total_limits.max_network_bandwidth_mbps)
-            }
+            ResourceType::NetworkBandwidth => Ok(usage.network_bandwidth_mbps + request.amount
+                <= self.total_limits.max_network_bandwidth_mbps),
             ResourceType::GpuMemory => {
                 Ok(usage.gpu_memory_mb + request.amount <= self.total_limits.max_gpu_memory_mb)
             }
@@ -411,22 +442,20 @@ impl ResourceInterface {
             .unwrap()
             .as_millis();
 
-        format!("{:?}_{}_{}_{}", 
-            request.resource_type,
-            request.requester,
-            request.amount,
-            timestamp
+        format!(
+            "{:?}_{}_{}_{}",
+            request.resource_type, request.requester, request.amount, timestamp
         )
     }
 
     fn detect_system_limits() -> HalResult<ResourceLimits> {
         // Detect actual system resources, accounting for TEE overhead
-        
+
         #[cfg(target_os = "linux")]
         {
             let is_tdx = crate::platform::is_intel_tdx_available();
             let is_sev = std::path::Path::new("/dev/sev-guest").exists();
-            
+
             let memory_mb = Self::get_system_memory_mb().unwrap_or(8192);
             let cpu_cores = Self::get_system_cpu_cores().unwrap_or(4);
             let storage_mb = Self::get_available_storage_mb().unwrap_or(102400);
@@ -443,7 +472,10 @@ impl ResourceInterface {
 
             log::info!(
                 "Detected system limits: {}MB RAM, {} CPU cores (TEE: TDX={}, SEV={})",
-                adjusted_memory_mb, cpu_cores, is_tdx, is_sev
+                adjusted_memory_mb,
+                cpu_cores,
+                is_tdx,
+                is_sev
             );
 
             Ok(ResourceLimits {
@@ -534,7 +566,10 @@ mod tests {
         let resource_interface = ResourceInterface::with_limits(create_test_limits());
 
         // Request memory
-        let result = resource_interface.request_additional_memory(512, "test_app").await.unwrap();
+        let result = resource_interface
+            .request_additional_memory(512, "test_app")
+            .await
+            .unwrap();
         assert!(!result.allocation_id.is_empty());
         assert_eq!(result.granted_amount, 512);
 
@@ -548,7 +583,9 @@ mod tests {
         let resource_interface = ResourceInterface::with_limits(create_test_limits());
 
         // Try to allocate more than available
-        let result = resource_interface.request_additional_memory(2048, "greedy_app").await;
+        let result = resource_interface
+            .request_additional_memory(2048, "greedy_app")
+            .await;
         assert!(result.is_err());
     }
 
@@ -557,14 +594,20 @@ mod tests {
         let resource_interface = ResourceInterface::with_limits(create_test_limits());
 
         // Allocate resource
-        let allocation = resource_interface.request_additional_cpu(2, "test_app").await.unwrap();
-        
+        let allocation = resource_interface
+            .request_additional_cpu(2, "test_app")
+            .await
+            .unwrap();
+
         // Check usage
         let usage = resource_interface.list_current_allocation().await.unwrap();
         assert_eq!(usage.cpu_cores, 2);
 
         // Release resource
-        resource_interface.release_resource(&allocation.allocation_id).await.unwrap();
+        resource_interface
+            .release_resource(&allocation.allocation_id)
+            .await
+            .unwrap();
 
         // Check usage again
         let usage = resource_interface.list_current_allocation().await.unwrap();
@@ -576,16 +619,28 @@ mod tests {
         let resource_interface = ResourceInterface::with_limits(create_test_limits());
 
         // Create multiple allocations
-        let _alloc1 = resource_interface.request_additional_memory(256, "app1").await.unwrap();
-        let _alloc2 = resource_interface.request_additional_cpu(1, "app2").await.unwrap();
-        let _alloc3 = resource_interface.request_storage(1024, "app1").await.unwrap();
+        let _alloc1 = resource_interface
+            .request_additional_memory(256, "app1")
+            .await
+            .unwrap();
+        let _alloc2 = resource_interface
+            .request_additional_cpu(1, "app2")
+            .await
+            .unwrap();
+        let _alloc3 = resource_interface
+            .request_storage(1024, "app1")
+            .await
+            .unwrap();
 
         // List all allocations
         let all_allocations = resource_interface.list_allocations().await.unwrap();
         assert_eq!(all_allocations.len(), 3);
 
         // List allocations by requester
-        let app1_allocations = resource_interface.list_allocations_by_requester("app1").await.unwrap();
+        let app1_allocations = resource_interface
+            .list_allocations_by_requester("app1")
+            .await
+            .unwrap();
         assert_eq!(app1_allocations.len(), 2);
     }
 
@@ -594,8 +649,14 @@ mod tests {
         let resource_interface = ResourceInterface::with_limits(create_test_limits());
 
         // Allocate some resources
-        let _alloc1 = resource_interface.request_additional_memory(512, "app1").await.unwrap(); // 50% of 1024
-        let _alloc2 = resource_interface.request_additional_cpu(2, "app2").await.unwrap(); // 50% of 4
+        let _alloc1 = resource_interface
+            .request_additional_memory(512, "app1")
+            .await
+            .unwrap(); // 50% of 1024
+        let _alloc2 = resource_interface
+            .request_additional_cpu(2, "app2")
+            .await
+            .unwrap(); // 50% of 4
 
         let stats = resource_interface.get_resource_statistics().await.unwrap();
         assert_eq!(stats.memory_utilization_percent, 50.0);
@@ -607,9 +668,15 @@ mod tests {
     async fn test_allocation_info() {
         let resource_interface = ResourceInterface::with_limits(create_test_limits());
 
-        let allocation = resource_interface.request_additional_memory(256, "test_app").await.unwrap();
-        
-        let info = resource_interface.get_allocation_info(&allocation.allocation_id).await.unwrap();
+        let allocation = resource_interface
+            .request_additional_memory(256, "test_app")
+            .await
+            .unwrap();
+
+        let info = resource_interface
+            .get_allocation_info(&allocation.allocation_id)
+            .await
+            .unwrap();
         assert_eq!(info.allocation_id, allocation.allocation_id);
         assert_eq!(info.amount, 256);
         assert_eq!(info.requester, "test_app");
@@ -619,7 +686,10 @@ mod tests {
     async fn test_gpu_memory_allocation() {
         let resource_interface = ResourceInterface::with_limits(create_test_limits());
 
-        let allocation = resource_interface.request_gpu_memory(1024, "gpu_app").await.unwrap();
+        let allocation = resource_interface
+            .request_gpu_memory(1024, "gpu_app")
+            .await
+            .unwrap();
         assert_eq!(allocation.granted_amount, 1024);
 
         let usage = resource_interface.list_current_allocation().await.unwrap();
@@ -630,7 +700,10 @@ mod tests {
     async fn test_network_bandwidth_allocation() {
         let resource_interface = ResourceInterface::with_limits(create_test_limits());
 
-        let allocation = resource_interface.request_network_bandwidth(50, "network_app").await.unwrap();
+        let allocation = resource_interface
+            .request_network_bandwidth(50, "network_app")
+            .await
+            .unwrap();
         assert_eq!(allocation.granted_amount, 50);
 
         let usage = resource_interface.list_current_allocation().await.unwrap();

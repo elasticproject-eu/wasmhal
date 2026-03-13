@@ -6,14 +6,12 @@ use ring::{
     aead::{self, Aad, BoundKey, Nonce, NonceSequence, OpeningKey, SealingKey, UnboundKey},
     digest::{self, SHA256, SHA384, SHA512},
     hmac::{self, Key as HmacKey},
-    signature::{self, EcdsaKeyPair, Ed25519KeyPair, RsaKeyPair, KeyPair},
-    rand::SystemRandom,
-    agreement::{self, EphemeralPrivateKey, PublicKey},
+    signature::{self, Ed25519KeyPair, KeyPair},
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde::{Deserialize, Serialize};
 
 /// Cryptographic context handle
 pub type CryptoContextHandle = u64;
@@ -29,10 +27,13 @@ pub struct CryptoInterface {
 /// Cryptographic context
 #[derive(Debug, Clone)]
 struct CryptoContext {
+    #[allow(dead_code)]
     handle: CryptoContextHandle,
     algorithm: String,
     key_data: Vec<u8>,
+    #[allow(dead_code)]
     context_type: ContextType,
+    #[allow(dead_code)]
     created_at: u64,
 }
 
@@ -102,7 +103,12 @@ impl CryptoInterface {
             "hashing" => ContextType::Hashing,
             "mac" => ContextType::Mac,
             "key_exchange" => ContextType::KeyExchange,
-            _ => return Err(HalError::InvalidParameter(format!("Invalid context type: {}", context_type))),
+            _ => {
+                return Err(HalError::InvalidParameter(format!(
+                    "Invalid context type: {}",
+                    context_type
+                )))
+            }
         };
 
         // Validate key for algorithm
@@ -131,7 +137,12 @@ impl CryptoInterface {
             "AES-128-GCM" => 16,
             "AES-256-GCM" => 32,
             "ChaCha20-Poly1305" => 32,
-            _ => return Err(HalError::NotSupported(format!("Algorithm not supported: {}", algorithm))),
+            _ => {
+                return Err(HalError::NotSupported(format!(
+                    "Algorithm not supported: {}",
+                    algorithm
+                )))
+            }
         };
 
         self.random.generate_key_material(key_length)
@@ -144,7 +155,8 @@ impl CryptoInterface {
         plaintext: &[u8],
     ) -> HalResult<Vec<u8>> {
         let contexts = self.contexts.read().await;
-        let context = contexts.get(&context_handle)
+        let context = contexts
+            .get(&context_handle)
             .ok_or_else(|| HalError::NotFound("Crypto context not found".to_string()))?;
 
         match context.algorithm.as_str() {
@@ -153,7 +165,10 @@ impl CryptoInterface {
                 // For now, we'll simulate it
                 self.simulate_rsa_encrypt(plaintext, &context.key_data)
             }
-            _ => Err(HalError::NotSupported(format!("Public key encryption not supported for: {}", context.algorithm))),
+            _ => Err(HalError::NotSupported(format!(
+                "Public key encryption not supported for: {}",
+                context.algorithm
+            ))),
         }
     }
 
@@ -164,7 +179,8 @@ impl CryptoInterface {
         ciphertext: &[u8],
     ) -> HalResult<Vec<u8>> {
         let contexts = self.contexts.read().await;
-        let context = contexts.get(&context_handle)
+        let context = contexts
+            .get(&context_handle)
             .ok_or_else(|| HalError::NotFound("Crypto context not found".to_string()))?;
 
         match context.algorithm.as_str() {
@@ -172,7 +188,10 @@ impl CryptoInterface {
                 // In a real implementation, this would use the actual RSA decryption
                 self.simulate_rsa_decrypt(ciphertext, &context.key_data)
             }
-            _ => Err(HalError::NotSupported(format!("Public key decryption not supported for: {}", context.algorithm))),
+            _ => Err(HalError::NotSupported(format!(
+                "Public key decryption not supported for: {}",
+                context.algorithm
+            ))),
         }
     }
 
@@ -183,16 +202,17 @@ impl CryptoInterface {
         data: &[u8],
     ) -> HalResult<SignatureResult> {
         let contexts = self.contexts.read().await;
-        let context = contexts.get(&context_handle)
+        let context = contexts
+            .get(&context_handle)
             .ok_or_else(|| HalError::NotFound("Crypto context not found".to_string()))?;
 
         match context.algorithm.as_str() {
             "Ed25519" => {
                 let key_pair = Ed25519KeyPair::from_seed_unchecked(&context.key_data)
                     .map_err(|_| HalError::CryptographicError("Invalid Ed25519 key".to_string()))?;
-                
+
                 let signature = key_pair.sign(data);
-                
+
                 Ok(SignatureResult {
                     signature: signature.as_ref().to_vec(),
                     algorithm: context.algorithm.clone(),
@@ -204,7 +224,10 @@ impl CryptoInterface {
                 // This is a simplified version
                 self.simulate_ecdsa_sign(data, &context.key_data, &context.algorithm)
             }
-            _ => Err(HalError::NotSupported(format!("Signing not supported for: {}", context.algorithm))),
+            _ => Err(HalError::NotSupported(format!(
+                "Signing not supported for: {}",
+                context.algorithm
+            ))),
         }
     }
 
@@ -228,7 +251,10 @@ impl CryptoInterface {
                 // Simulate ECDSA verification
                 Ok(self.simulate_ecdsa_verify(public_key, data, signature))
             }
-            _ => Err(HalError::NotSupported(format!("Signature verification not supported for: {}", algorithm))),
+            _ => Err(HalError::NotSupported(format!(
+                "Signature verification not supported for: {}",
+                algorithm
+            ))),
         }
     }
 
@@ -247,7 +273,10 @@ impl CryptoInterface {
                 let digest = digest::digest(&SHA512, data);
                 Ok(digest.as_ref().to_vec())
             }
-            _ => Err(HalError::NotSupported(format!("Hash algorithm not supported: {}", algorithm))),
+            _ => Err(HalError::NotSupported(format!(
+                "Hash algorithm not supported: {}",
+                algorithm
+            ))),
         }
     }
 
@@ -258,7 +287,8 @@ impl CryptoInterface {
         data: &[u8],
     ) -> HalResult<Vec<u8>> {
         let contexts = self.contexts.read().await;
-        let context = contexts.get(&context_handle)
+        let context = contexts
+            .get(&context_handle)
             .ok_or_else(|| HalError::NotFound("Crypto context not found".to_string()))?;
 
         match context.algorithm.as_str() {
@@ -277,7 +307,10 @@ impl CryptoInterface {
                 let tag = hmac::sign(&key, data);
                 Ok(tag.as_ref().to_vec())
             }
-            _ => Err(HalError::NotSupported(format!("MAC algorithm not supported: {}", context.algorithm))),
+            _ => Err(HalError::NotSupported(format!(
+                "MAC algorithm not supported: {}",
+                context.algorithm
+            ))),
         }
     }
 
@@ -289,7 +322,8 @@ impl CryptoInterface {
         mac: &[u8],
     ) -> HalResult<bool> {
         let contexts = self.contexts.read().await;
-        let context = contexts.get(&context_handle)
+        let context = contexts
+            .get(&context_handle)
             .ok_or_else(|| HalError::NotFound("Crypto context not found".to_string()))?;
 
         match context.algorithm.as_str() {
@@ -314,7 +348,10 @@ impl CryptoInterface {
                     Err(_) => Ok(false),
                 }
             }
-            _ => Err(HalError::NotSupported(format!("MAC verification not supported: {}", context.algorithm))),
+            _ => Err(HalError::NotSupported(format!(
+                "MAC verification not supported: {}",
+                context.algorithm
+            ))),
         }
     }
 
@@ -332,14 +369,13 @@ impl CryptoInterface {
                     .map_err(|_| HalError::CryptographicError("Invalid AES key".to_string()))?;
 
                 let nonce_bytes = self.random.generate_nonce(12)?;
-                let nonce = Nonce::try_assume_unique_for_key(&nonce_bytes)
-                    .map_err(|_| HalError::CryptographicError("Invalid nonce".to_string()))?;
 
                 let mut sealing_key = SealingKey::new(unbound_key, NonceGen::new());
                 let aad = Aad::from(aad.unwrap_or(b""));
 
                 let mut in_out = plaintext.to_vec();
-                sealing_key.seal_in_place_append_tag(aad, &mut in_out)
+                sealing_key
+                    .seal_in_place_append_tag(aad, &mut in_out)
                     .map_err(|_| HalError::CryptographicError("Encryption failed".to_string()))?;
 
                 // Prepend nonce to ciphertext
@@ -348,25 +384,28 @@ impl CryptoInterface {
                 Ok(result)
             }
             "ChaCha20-Poly1305" => {
-                let unbound_key = UnboundKey::new(&aead::CHACHA20_POLY1305, key)
-                    .map_err(|_| HalError::CryptographicError("Invalid ChaCha20 key".to_string()))?;
+                let unbound_key = UnboundKey::new(&aead::CHACHA20_POLY1305, key).map_err(|_| {
+                    HalError::CryptographicError("Invalid ChaCha20 key".to_string())
+                })?;
 
                 let nonce_bytes = self.random.generate_nonce(12)?;
-                let nonce = Nonce::try_assume_unique_for_key(&nonce_bytes)
-                    .map_err(|_| HalError::CryptographicError("Invalid nonce".to_string()))?;
 
                 let mut sealing_key = SealingKey::new(unbound_key, NonceGen::new());
                 let aad = Aad::from(aad.unwrap_or(b""));
 
                 let mut in_out = plaintext.to_vec();
-                sealing_key.seal_in_place_append_tag(aad, &mut in_out)
+                sealing_key
+                    .seal_in_place_append_tag(aad, &mut in_out)
                     .map_err(|_| HalError::CryptographicError("Encryption failed".to_string()))?;
 
                 let mut result = nonce_bytes;
                 result.extend_from_slice(&in_out);
                 Ok(result)
             }
-            _ => Err(HalError::NotSupported(format!("Symmetric encryption not supported: {}", algorithm))),
+            _ => Err(HalError::NotSupported(format!(
+                "Symmetric encryption not supported: {}",
+                algorithm
+            ))),
         }
     }
 
@@ -379,10 +418,11 @@ impl CryptoInterface {
         aad: Option<&[u8]>,
     ) -> HalResult<Vec<u8>> {
         if ciphertext.len() < 12 {
-            return Err(HalError::CryptographicError("Invalid ciphertext length".to_string()));
+            return Err(HalError::CryptographicError(
+                "Invalid ciphertext length".to_string(),
+            ));
         }
 
-        let nonce_bytes = &ciphertext[..12];
         let encrypted_data = &ciphertext[12..];
 
         match algorithm {
@@ -390,35 +430,35 @@ impl CryptoInterface {
                 let unbound_key = UnboundKey::new(&aead::AES_256_GCM, key)
                     .map_err(|_| HalError::CryptographicError("Invalid AES key".to_string()))?;
 
-                let nonce = Nonce::try_assume_unique_for_key(nonce_bytes)
-                    .map_err(|_| HalError::CryptographicError("Invalid nonce".to_string()))?;
-
                 let mut opening_key = OpeningKey::new(unbound_key, NonceGen::new());
                 let aad = Aad::from(aad.unwrap_or(b""));
 
                 let mut in_out = encrypted_data.to_vec();
-                let plaintext = opening_key.open_in_place(aad, &mut in_out)
+                let plaintext = opening_key
+                    .open_in_place(aad, &mut in_out)
                     .map_err(|_| HalError::CryptographicError("Decryption failed".to_string()))?;
 
                 Ok(plaintext.to_vec())
             }
             "ChaCha20-Poly1305" => {
-                let unbound_key = UnboundKey::new(&aead::CHACHA20_POLY1305, key)
-                    .map_err(|_| HalError::CryptographicError("Invalid ChaCha20 key".to_string()))?;
-
-                let nonce = Nonce::try_assume_unique_for_key(nonce_bytes)
-                    .map_err(|_| HalError::CryptographicError("Invalid nonce".to_string()))?;
+                let unbound_key = UnboundKey::new(&aead::CHACHA20_POLY1305, key).map_err(|_| {
+                    HalError::CryptographicError("Invalid ChaCha20 key".to_string())
+                })?;
 
                 let mut opening_key = OpeningKey::new(unbound_key, NonceGen::new());
                 let aad = Aad::from(aad.unwrap_or(b""));
 
                 let mut in_out = encrypted_data.to_vec();
-                let plaintext = opening_key.open_in_place(aad, &mut in_out)
+                let plaintext = opening_key
+                    .open_in_place(aad, &mut in_out)
                     .map_err(|_| HalError::CryptographicError("Decryption failed".to_string()))?;
 
                 Ok(plaintext.to_vec())
             }
-            _ => Err(HalError::NotSupported(format!("Symmetric decryption not supported: {}", algorithm))),
+            _ => Err(HalError::NotSupported(format!(
+                "Symmetric decryption not supported: {}",
+                algorithm
+            ))),
         }
     }
 
@@ -426,17 +466,23 @@ impl CryptoInterface {
     pub async fn seal_data(&self, data: &[u8], policy: Option<&str>) -> HalResult<Vec<u8>> {
         // In a real TEE implementation, this would use platform-specific sealing
         // For demonstration, we'll use symmetric encryption with a platform-derived key
-        
+
         let platform_key = self.derive_platform_key(policy).await?;
-        self.symmetric_encrypt("AES-256-GCM", &platform_key, data, None).await
+        self.symmetric_encrypt("AES-256-GCM", &platform_key, data, None)
+            .await
     }
 
     /// Unseal data (TEE-specific operation)
-    pub async fn unseal_data(&self, sealed_data: &[u8], policy: Option<&str>) -> HalResult<Vec<u8>> {
+    pub async fn unseal_data(
+        &self,
+        sealed_data: &[u8],
+        policy: Option<&str>,
+    ) -> HalResult<Vec<u8>> {
         // In a real TEE implementation, this would use platform-specific unsealing
-        
+
         let platform_key = self.derive_platform_key(policy).await?;
-        self.symmetric_decrypt("AES-256-GCM", &platform_key, sealed_data, None).await
+        self.symmetric_decrypt("AES-256-GCM", &platform_key, sealed_data, None)
+            .await
     }
 
     /// Platform attestation (TDX-compatible)
@@ -479,14 +525,14 @@ impl CryptoInterface {
         // Check if running on Intel TDX
         if crate::platform::is_intel_tdx_available() {
             let mut measurements = HashMap::new();
-            
+
             // Try to read TDX measurements from TSM
             if let Ok(mrtd) = std::fs::read_to_string("/sys/kernel/config/tsm/report/mrtd") {
                 measurements.insert("MRTD".to_string(), mrtd.trim().to_string());
             } else {
                 measurements.insert("MRTD".to_string(), "tdx_measurement_mrtd".to_string());
             }
-            
+
             // Read RTMR (Runtime Measurement Registers)
             for i in 0..4 {
                 let rtmr_path = format!("/sys/kernel/config/tsm/report/rtmr{}", i);
@@ -496,9 +542,12 @@ impl CryptoInterface {
                     measurements.insert(format!("RTMR{}", i), format!("tdx_rtmr_{}", i));
                 }
             }
-            
-            measurements.insert("platform_features".to_string(), "RDRAND,RDSEED,AES-NI".to_string());
-            
+
+            measurements.insert(
+                "platform_features".to_string(),
+                "RDRAND,RDSEED,AES-NI".to_string(),
+            );
+
             Ok(("intel-tdx".to_string(), measurements))
         } else {
             // Fallback to SEV-SNP or generic measurements
@@ -506,7 +555,7 @@ impl CryptoInterface {
             measurements.insert("bootloader".to_string(), "simulated_hash_1".to_string());
             measurements.insert("kernel".to_string(), "simulated_hash_2".to_string());
             measurements.insert("hal".to_string(), "simulated_hash_3".to_string());
-            
+
             Ok(("amd-sev-snp".to_string(), measurements))
         }
     }
@@ -522,7 +571,9 @@ impl CryptoInterface {
         match (algorithm, context_type) {
             ("AES-128-GCM", ContextType::SymmetricEncryption) if key_data.len() == 16 => Ok(()),
             ("AES-256-GCM", ContextType::SymmetricEncryption) if key_data.len() == 32 => Ok(()),
-            ("ChaCha20-Poly1305", ContextType::SymmetricEncryption) if key_data.len() == 32 => Ok(()),
+            ("ChaCha20-Poly1305", ContextType::SymmetricEncryption) if key_data.len() == 32 => {
+                Ok(())
+            }
             ("Ed25519", ContextType::Signing) if key_data.len() == 32 => Ok(()),
             ("HMAC-SHA256", ContextType::Mac) if !key_data.is_empty() => Ok(()),
             ("HMAC-SHA384", ContextType::Mac) if !key_data.is_empty() => Ok(()),
@@ -537,19 +588,19 @@ impl CryptoInterface {
     async fn derive_platform_key(&self, policy: Option<&str>) -> HalResult<Vec<u8>> {
         // In a real implementation, this would derive a key from platform measurements
         // and sealing policy. For TDX, this would use TDX sealing keys.
-        
+
         let mut key_material = Vec::new();
-        
+
         // Add platform-specific measurement to key derivation
         if crate::platform::is_intel_tdx_available() {
             // Use TDX measurements for key derivation
             key_material.extend_from_slice(b"tdx_platform_key_base");
-            
+
             // Include MRTD if available
             if let Ok(mrtd) = std::fs::read_to_string("/sys/kernel/config/tsm/report/mrtd") {
                 key_material.extend_from_slice(mrtd.trim().as_bytes());
             }
-            
+
             // Include RTMR0 (typically contains firmware measurements)
             if let Ok(rtmr0) = std::fs::read_to_string("/sys/kernel/config/tsm/report/rtmr0") {
                 key_material.extend_from_slice(rtmr0.trim().as_bytes());
@@ -557,11 +608,11 @@ impl CryptoInterface {
         } else {
             key_material.extend_from_slice(b"platform_key_base");
         }
-        
+
         if let Some(p) = policy {
             key_material.extend_from_slice(p.as_bytes());
         }
-        
+
         // Hash to get consistent key
         self.hash_data("SHA-256", &key_material).await
     }
@@ -587,25 +638,34 @@ impl CryptoInterface {
     fn simulate_rsa_decrypt(&self, ciphertext: &[u8], _key: &[u8]) -> HalResult<Vec<u8>> {
         // Placeholder RSA decryption
         if ciphertext.len() < 10 {
-            return Err(HalError::CryptographicError("Invalid RSA ciphertext".to_string()));
+            return Err(HalError::CryptographicError(
+                "Invalid RSA ciphertext".to_string(),
+            ));
         }
-        
+
         // Find separator and extract plaintext
         if let Some(sep_pos) = ciphertext.iter().position(|&x| x == 0x00) {
             if sep_pos + 1 < ciphertext.len() {
                 return Ok(ciphertext[sep_pos + 1..].to_vec());
             }
         }
-        
-        Err(HalError::CryptographicError("Failed to decrypt RSA data".to_string()))
+
+        Err(HalError::CryptographicError(
+            "Failed to decrypt RSA data".to_string(),
+        ))
     }
 
-    fn simulate_ecdsa_sign(&self, data: &[u8], _key: &[u8], algorithm: &str) -> HalResult<SignatureResult> {
+    fn simulate_ecdsa_sign(
+        &self,
+        data: &[u8],
+        _key: &[u8],
+        algorithm: &str,
+    ) -> HalResult<SignatureResult> {
         // Placeholder ECDSA signing
         let hash = ring::digest::digest(&SHA256, data);
         let signature = hash.as_ref().to_vec();
         let public_key = self.random.generate_random_bytes(64).unwrap_or_default();
-        
+
         Ok(SignatureResult {
             signature,
             algorithm: algorithm.to_string(),
@@ -652,7 +712,7 @@ mod tests {
     #[tokio::test]
     async fn test_symmetric_encryption() {
         println!("=== CRYPTO DEMO: AES-256-GCM Encryption ===");
-        
+
         // First verify we're running in SEV-SNP environment
         match crate::ElasticTeeHal::new() {
             Ok(hal) => {
@@ -666,13 +726,13 @@ mod tests {
                     println!("  - Hardware-accelerated encryption available");
                     println!("  - Keys protected in TEE secure memory");
                 }
-            },
+            }
             Err(_) => {
                 println!("⚠ Warning: Not running in verified TEE environment");
             }
         }
         println!();
-        
+
         let crypto = CryptoInterface::new();
         let key = crypto.generate_symmetric_key("AES-256-GCM").await.unwrap();
         let plaintext = b"Hello, World!";
@@ -680,15 +740,27 @@ mod tests {
         println!("Plaintext: {:?}", std::str::from_utf8(plaintext).unwrap());
         println!("Key length: {} bytes", key.len());
 
-        let ciphertext = crypto.symmetric_encrypt("AES-256-GCM", &key, plaintext, None).await.unwrap();
+        let ciphertext = crypto
+            .symmetric_encrypt("AES-256-GCM", &key, plaintext, None)
+            .await
+            .unwrap();
         println!("✓ Encrypted with AES-256-GCM in TEE");
         println!("  - Ciphertext length: {} bytes", ciphertext.len());
         println!("  - Ciphertext (hex): {}", hex::encode(&ciphertext));
 
-        let decrypted = crypto.symmetric_decrypt("AES-256-GCM", &key, &ciphertext, None).await.unwrap();
+        let decrypted = crypto
+            .symmetric_decrypt("AES-256-GCM", &key, &ciphertext, None)
+            .await
+            .unwrap();
         println!("✓ Decrypted successfully");
-        println!("  - Decrypted: {:?}", std::str::from_utf8(&decrypted).unwrap());
-        println!("  - Plaintext == Decrypted: {}", plaintext == decrypted.as_slice());
+        println!(
+            "  - Decrypted: {:?}",
+            std::str::from_utf8(&decrypted).unwrap()
+        );
+        println!(
+            "  - Plaintext == Decrypted: {}",
+            plaintext == decrypted.as_slice()
+        );
         println!("=== ENCRYPTION DEMO COMPLETE ===\n");
 
         assert_eq!(plaintext, decrypted.as_slice());
@@ -712,7 +784,10 @@ mod tests {
         let key = crypto.random.generate_key_material(32).unwrap();
         let data = b"test data";
 
-        let context_handle = crypto.load_key_context("HMAC-SHA256", &key, "mac").await.unwrap();
+        let context_handle = crypto
+            .load_key_context("HMAC-SHA256", &key, "mac")
+            .await
+            .unwrap();
         let mac = crypto.calculate_mac(context_handle, data).await.unwrap();
         let valid = crypto.verify_mac(context_handle, data, &mac).await.unwrap();
 
@@ -722,7 +797,7 @@ mod tests {
     #[tokio::test]
     async fn test_ed25519_signing() {
         println!("=== CRYPTO DEMO: Ed25519 Digital Signing ===");
-        
+
         // First verify we're running in SEV-SNP environment
         match crate::ElasticTeeHal::new() {
             Ok(hal) => {
@@ -735,13 +810,13 @@ mod tests {
                     println!("✓ TEE Environment detected: {:?}", hal.platform_type());
                     println!("  - Cryptographic operations are TEE-protected");
                 }
-            },
+            }
             Err(_) => {
                 println!("⚠ Warning: Not running in verified TEE environment");
             }
         }
         println!();
-        
+
         let crypto = CryptoInterface::new();
         let key = crypto.random.generate_key_material(32).unwrap();
         let data = b"test data";
@@ -749,24 +824,42 @@ mod tests {
         println!("Input data: {:?}", std::str::from_utf8(data).unwrap());
         println!("Key material length: {} bytes", key.len());
 
-        let context_handle = crypto.load_key_context("Ed25519", &key, "signing").await.unwrap();
-        println!("✓ Loaded Ed25519 signing context with handle: {}", context_handle);
-        
+        let context_handle = crypto
+            .load_key_context("Ed25519", &key, "signing")
+            .await
+            .unwrap();
+        println!(
+            "✓ Loaded Ed25519 signing context with handle: {}",
+            context_handle
+        );
+
         let signature_result = crypto.sign_data(context_handle, data).await.unwrap();
         println!("✓ Generated digital signature in TEE");
         println!("  - Algorithm: {}", signature_result.algorithm);
-        println!("  - Public key: {} bytes", signature_result.public_key.len());
+        println!(
+            "  - Public key: {} bytes",
+            signature_result.public_key.len()
+        );
         println!("  - Signature: {} bytes", signature_result.signature.len());
-        println!("  - Signature (hex): {}", hex::encode(&signature_result.signature));
-        
-        let valid = crypto.verify_signature(
-            &signature_result.algorithm,
-            &signature_result.public_key,
-            data,
-            &signature_result.signature,
-        ).await.unwrap();
+        println!(
+            "  - Signature (hex): {}",
+            hex::encode(&signature_result.signature)
+        );
 
-        println!("✓ Signature verification: {}", if valid { "VALID" } else { "INVALID" });
+        let valid = crypto
+            .verify_signature(
+                &signature_result.algorithm,
+                &signature_result.public_key,
+                data,
+                &signature_result.signature,
+            )
+            .await
+            .unwrap();
+
+        println!(
+            "✓ Signature verification: {}",
+            if valid { "VALID" } else { "INVALID" }
+        );
         println!("=== CRYPTO DEMO COMPLETE ===\n");
 
         assert!(valid);
@@ -778,7 +871,10 @@ mod tests {
         let data = b"secret data";
 
         let sealed = crypto.seal_data(data, Some("test_policy")).await.unwrap();
-        let unsealed = crypto.unseal_data(&sealed, Some("test_policy")).await.unwrap();
+        let unsealed = crypto
+            .unseal_data(&sealed, Some("test_policy"))
+            .await
+            .unwrap();
 
         assert_eq!(data, unsealed.as_slice());
     }
@@ -802,7 +898,10 @@ mod tests {
         let aes_key = crypto.generate_symmetric_key("AES-256-GCM").await.unwrap();
         assert_eq!(aes_key.len(), 32);
 
-        let chacha_key = crypto.generate_symmetric_key("ChaCha20-Poly1305").await.unwrap();
+        let chacha_key = crypto
+            .generate_symmetric_key("ChaCha20-Poly1305")
+            .await
+            .unwrap();
         assert_eq!(chacha_key.len(), 32);
 
         // Keys should be different

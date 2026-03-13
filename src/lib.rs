@@ -4,45 +4,46 @@
 /// This crate provides a comprehensive interface for TEE workloads to interact
 /// with platform-specific hardware features while maintaining portability across
 /// different TEE implementations (AMD SEV-SNP, Intel TDX, ARM TrustZone, etc.)
-
 // WIT bindgen configuration - enable when WIT dependencies are fully resolved
 // For now, the WIT definitions are available in ./wit/world.wit
 // wit_bindgen::generate!({
 //     world: "elastic-tee-hal",
 //     path: "wit"
 // });
-
-pub mod error;
-pub mod platform;
 pub mod capabilities;
 pub mod clock;
-pub mod random;
-pub mod storage;
-pub mod crypto;
-pub mod sockets;
-pub mod gpu;
-pub mod resources;
-pub mod events;
 pub mod communication;
+pub mod crypto;
+pub mod error;
+pub mod events;
+pub mod gpu;
+pub mod platform;
+pub mod random;
+pub mod resources;
+pub mod sockets;
+pub mod storage;
 
 // Modular interface system
+pub mod enforcement;
 pub mod interfaces;
 pub mod providers;
-pub mod enforcement;
 
 // Re-export main types
-pub use error::{HalError, HalResult};
-pub use platform::ElasticTeeHal;
 pub use capabilities::PlatformCapabilities;
 pub use clock::ClockInterface;
-pub use random::RandomInterface;
-pub use storage::StorageInterface;
+pub use communication::{
+    BufferConfig, CommBufferHandle, CommMessage, CommunicationInterface, MessagePriority,
+    MessageType,
+};
 pub use crypto::CryptoInterface;
-pub use sockets::SocketInterface;
-pub use gpu::GpuInterface;
-pub use resources::ResourceInterface;
+pub use error::{HalError, HalResult};
 pub use events::EventInterface;
-pub use communication::{CommunicationInterface, CommBufferHandle, BufferConfig, CommMessage, MessageType, MessagePriority};
+pub use gpu::GpuInterface;
+pub use platform::ElasticTeeHal;
+pub use random::RandomInterface;
+pub use resources::ResourceInterface;
+pub use sockets::SocketInterface;
+pub use storage::StorageInterface;
 
 /// HAL version information
 pub const HAL_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -73,7 +74,7 @@ mod tests {
         // Test with a specific platform since auto-detection requires actual hardware
         let hal = ElasticTeeHal::with_platform(platform::PlatformType::AmdSev);
         match &hal {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => println!("HAL creation failed: {:?}", e),
         }
         assert!(hal.is_ok());

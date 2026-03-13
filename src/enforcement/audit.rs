@@ -31,12 +31,12 @@ impl AuditEvent {
             details: None,
         }
     }
-    
+
     pub fn with_success(mut self, success: bool) -> Self {
         self.success = success;
         self
     }
-    
+
     pub fn with_details(mut self, details: impl Into<String>) -> Self {
         self.details = Some(details.into());
         self
@@ -56,31 +56,31 @@ impl AuditLog {
             max_events: 10_000, // Keep last 10k events
         }
     }
-    
+
     pub fn with_capacity(max_events: usize) -> Self {
         Self {
             events: Arc::new(RwLock::new(Vec::with_capacity(max_events))),
             max_events,
         }
     }
-    
+
     /// Log an audit event
     pub fn log(&self, event: AuditEvent) {
         let mut events = self.events.write().unwrap();
         events.push(event);
-        
+
         // Trim old events if we exceed max
         if events.len() > self.max_events {
             let drain_count = events.len() - self.max_events;
             events.drain(0..drain_count);
         }
     }
-    
+
     /// Get all events
     pub fn get_events(&self) -> Vec<AuditEvent> {
         self.events.read().unwrap().clone()
     }
-    
+
     /// Get events for a specific entity
     pub fn get_entity_events(&self, entity_id: &EntityId) -> Vec<AuditEvent> {
         self.events
@@ -91,7 +91,7 @@ impl AuditLog {
             .cloned()
             .collect()
     }
-    
+
     /// Get events for a specific capability
     pub fn get_capability_events(&self, capability: &str) -> Vec<AuditEvent> {
         self.events
@@ -102,7 +102,7 @@ impl AuditLog {
             .cloned()
             .collect()
     }
-    
+
     /// Get failed operations
     pub fn get_failed_events(&self) -> Vec<AuditEvent> {
         self.events
@@ -113,12 +113,12 @@ impl AuditLog {
             .cloned()
             .collect()
     }
-    
+
     /// Clear all events
     pub fn clear(&self) {
         self.events.write().unwrap().clear();
     }
-    
+
     /// Get event count
     pub fn count(&self) -> usize {
         self.events.read().unwrap().len()

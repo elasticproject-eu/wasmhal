@@ -9,7 +9,7 @@ interface capabilities {
     supported: bool,
     version: string,
   }
-  
+
   list-capabilities: func() -> list<capability-info>;
   has-capability: func(feature-name: string) -> bool;
 }

@@ -100,6 +100,7 @@ world <interface-name>-world {
 ```
 
 This allows the interface to be:
+
 - Used standalone
 - Composed with other interfaces
 - Versioned independently

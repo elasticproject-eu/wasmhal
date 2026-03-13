@@ -75,15 +75,15 @@ async fn main() -> HalResult<()> {
     // Initialize HAL with automatic platform detection
     // Detects AMD SEV-SNP or Intel TDX automatically
     let hal = ElasticTeeHal::new()?;
-    
+
     // Initialize platform-specific features
     hal.initialize().await?;
-    
+
     // Get platform capabilities
     let capabilities = hal.get_capabilities().await?;
     println!("Platform: {:?}", capabilities.platform_type);
     println!("Features: {:?}", capabilities.features);
-    
+
     Ok(())
 }
 ```
@@ -95,23 +95,23 @@ use elastic_tee_hal::{CryptoInterface, HalResult};
 
 async fn crypto_example() -> HalResult<()> {
     let crypto = CryptoInterface::new().await?;
-    
+
     // Generate key pair
     let keypair = crypto.generate_key_pair("Ed25519").await?;
-    
+
     // Sign data
     let data = b"Hello, TEE!";
     let signature = crypto.sign(&keypair.private_key, data, "Ed25519").await?;
-    
+
     // Verify signature
     let is_valid = crypto.verify(&keypair.public_key, data, &signature, "Ed25519").await?;
     println!("Signature valid: {}", is_valid);
-    
+
     // Platform attestation
     let nonce = crypto.generate_nonce(32)?;
     let attestation = crypto.get_platform_attestation(&nonce).await?;
     println!("Attestation: {:?}", attestation);
-    
+
     Ok(())
 }
 ```
@@ -123,7 +123,7 @@ use elastic_tee_hal::{StorageInterface, StorageConfig, HalResult};
 
 async fn storage_example() -> HalResult<()> {
     let storage = StorageInterface::new().await?;
-    
+
     // Create encrypted storage container
     let config = StorageConfig {
         name: "my-container".to_string(),
@@ -131,17 +131,17 @@ async fn storage_example() -> HalResult<()> {
         encrypted: true,
         compression: true,
     };
-    
+
     let container = storage.create_container(config).await?;
-    
+
     // Store encrypted object
     let data = b"Confidential data";
     let object_id = storage.store_object(container, "secret.txt", data, None).await?;
-    
+
     // Retrieve and decrypt object
     let retrieved = storage.get_object(container, &object_id).await?;
     println!("Retrieved: {:?}", String::from_utf8(retrieved));
-    
+
     Ok(())
 }
 ```
@@ -153,22 +153,22 @@ use elastic_tee_hal::{SocketInterface, HalResult};
 
 async fn network_example() -> HalResult<()> {
     let sockets = SocketInterface::new();
-    
+
     // Create secure TLS connection
     let socket = sockets.create_tls_client(
         "example.com:443",
         "example.com",
         None // Use default TLS config
     ).await?;
-    
+
     // Send data
     let data = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n";
     sockets.send(socket, data).await?;
-    
+
     // Receive response
     let response = sockets.receive(socket, 1024).await?;
     println!("Response: {:?}", String::from_utf8_lossy(&response));
-    
+
     Ok(())
 }
 ```
@@ -180,7 +180,7 @@ use elastic_tee_hal::{CommunicationInterface, BufferConfig, MessageType, Message
 
 async fn communication_example() -> HalResult<()> {
     let comm = CommunicationInterface::new();
-    
+
     // Set up communication buffer
     let config = BufferConfig {
         name: "workload-channel".to_string(),
@@ -190,9 +190,9 @@ async fn communication_example() -> HalResult<()> {
         write_permissions: vec!["workload1".to_string(), "workload2".to_string()],
         admin_permissions: vec!["admin".to_string()],
     };
-    
+
     let buffer_handle = comm.setup_communication_buffer(config).await?;
-    
+
     // Send message from workload1
     let message_data = b"Hello from workload1!";
     comm.push_data_to_buffer(
@@ -202,12 +202,12 @@ async fn communication_example() -> HalResult<()> {
         MessageType::Data,
         MessagePriority::Normal,
     ).await?;
-    
+
     // Receive message in workload2
     if let Some(message) = comm.read_data_from_buffer(buffer_handle, "workload2").await? {
         println!("Received from {}: {:?}", message.sender, String::from_utf8(message.data));
     }
-    
+
     Ok(())
 }
 ```
@@ -219,36 +219,36 @@ use elastic_tee_hal::{GpuInterface, HalResult};
 
 async fn gpu_example() -> HalResult<()> {
     let gpu = GpuInterface::new().await?;
-    
+
     // List available GPU adapters
     let adapters = gpu.list_adapters().await?;
     println!("Available GPUs: {}", adapters.len());
-    
+
     // Create device on first adapter
     if let Some(adapter) = adapters.first() {
         let device = gpu.create_device(adapter.handle, &[]).await?;
-        
+
         // Create compute pipeline
         let shader_code = include_bytes!("compute_shader.wgsl");
         let pipeline = gpu.create_compute_pipeline(device, shader_code, "main", [64, 1, 1]).await?;
-        
+
         // Create buffers and run computation
         let input_data = vec![1.0f32; 1024];
         let input_buffer = gpu.create_buffer(device, &bytemuck::cast_slice(&input_data), true, false).await?;
         let output_buffer = gpu.create_buffer(device, &vec![0u8; 4096], false, true).await?;
-        
+
         // Execute compute pass
         let compute_pass = gpu.begin_compute_pass(device, pipeline).await?;
         gpu.set_buffer(compute_pass, 0, input_buffer).await?;
         gpu.set_buffer(compute_pass, 1, output_buffer).await?;
         gpu.dispatch(compute_pass, 16, 1, 1).await?;
         gpu.end_compute_pass(compute_pass).await?;
-        
+
         // Read results
         let results = gpu.read_buffer(output_buffer).await?;
         println!("Compute results: {:?}", results);
     }
-    
+
     Ok(())
 }
 ```
@@ -482,16 +482,19 @@ The HAL is designed for high-performance confidential computing:
 ## Security Considerations
 
 ### Platform Attestation
+
 - All cryptographic operations can include platform measurements
 - Remote attestation supported via platform-specific mechanisms
 - Hardware-rooted trust chain validation
 
 ### Memory Protection
+
 - All sensitive data encrypted in memory when possible
 - Secure memory allocation patterns for TEE environments
 - Stack and heap protection via platform features
 
 ### Network Security
+
 - TLS 1.3 minimum for all network communications
 - Certificate pinning and validation
 - Perfect forward secrecy for all connections
@@ -500,16 +503,16 @@ The HAL is designed for high-performance confidential computing:
 
 ### Core Interfaces
 
-| Interface | Purpose | Key Methods |
-|-----------|---------|-------------|
-| `ElasticTeeHal` | Main HAL entry point | `new()`, `initialize()`, `get_capabilities()` |
-| `CryptoInterface` | Cryptographic operations | `encrypt()`, `decrypt()`, `sign()`, `verify()` |
-| `StorageInterface` | Encrypted storage | `create_container()`, `store_object()`, `get_object()` |
-| `SocketInterface` | Network communication | `create_tls_client()`, `send()`, `receive()` |
-| `CommunicationInterface` | Inter-workload messaging | `setup_communication_buffer()`, `push_data_to_buffer()` |
-| `GpuInterface` | GPU compute | `create_device()`, `create_compute_pipeline()`, `dispatch()` |
-| `ResourceInterface` | Resource management | `allocate_memory()`, `allocate_cpu()`, `get_usage_stats()` |
-| `EventInterface` | Event handling | `subscribe()`, `publish()`, `unsubscribe()` |
+| Interface                | Purpose                  | Key Methods                                                  |
+| ------------------------ | ------------------------ | ------------------------------------------------------------ |
+| `ElasticTeeHal`          | Main HAL entry point     | `new()`, `initialize()`, `get_capabilities()`                |
+| `CryptoInterface`        | Cryptographic operations | `encrypt()`, `decrypt()`, `sign()`, `verify()`               |
+| `StorageInterface`       | Encrypted storage        | `create_container()`, `store_object()`, `get_object()`       |
+| `SocketInterface`        | Network communication    | `create_tls_client()`, `send()`, `receive()`                 |
+| `CommunicationInterface` | Inter-workload messaging | `setup_communication_buffer()`, `push_data_to_buffer()`      |
+| `GpuInterface`           | GPU compute              | `create_device()`, `create_compute_pipeline()`, `dispatch()` |
+| `ResourceInterface`      | Resource management      | `allocate_memory()`, `allocate_cpu()`, `get_usage_stats()`   |
+| `EventInterface`         | Event handling           | `subscribe()`, `publish()`, `unsubscribe()`                  |
 
 ### Platform Types
 

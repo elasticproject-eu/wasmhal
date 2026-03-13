@@ -9,7 +9,7 @@ world add-user-service {
     import elastic:storage/storage@0.1.0;
     import elastic:clock/clock@0.1.0;
     import elastic:random/random@0.1.0;
-    
+
     // Export the user management API
     export user-api;
 }
@@ -23,17 +23,17 @@ interface user-api {
         email: string,
         created-at: u64,
     }
-    
+
     /// Add a new user
     /// Returns the user record with generated ID and timestamp
     add-user: func(name: string, email: string) -> result<user, string>;
-    
+
     /// Get user by ID
     get-user: func(id: string) -> result<user, string>;
-    
+
     /// List all user IDs
     list-users: func() -> result<list<string>, string>;
-    
+
     /// Get attestation report for this service
     get-attestation: func(nonce: list<u8>) -> result<list<u8>, string>;
 }
