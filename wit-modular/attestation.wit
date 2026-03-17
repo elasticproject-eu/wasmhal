@@ -1,0 +1,11 @@
+package elastic:attestation@0.1.0;
+
+interface hal {
+    /// Request a hardware-rooted attestation report using a provided nonce.
+    get-attestation: func(nonce: list<u8>) -> result<list<u8>, string>;
+}
+
+world attest {
+    import hal;
+    export run: func(nonce: list<u8>);
+}
