@@ -17,6 +17,7 @@ use host_impl::HalHost;
 /// Runtime state that implements WASI and HAL interfaces
 pub struct RuntimeState {
     wasi: WasiCtx,
+    table: wasmtime::component::ResourceTable,
     hal: HalHost,
 }
 
@@ -25,7 +26,7 @@ impl WasiView for RuntimeState {
         &mut self.wasi
     }
     fn table(&mut self) -> &mut wasmtime::component::ResourceTable {
-        self.wasi.table()
+        &mut self.table
     }
 }
 
@@ -57,10 +58,11 @@ impl HalRuntime {
     /// Create a new store with HAL host implementation
     pub fn create_store(&self) -> Result<Store<RuntimeState>> {
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_env().build();
+        let table = wasmtime::component::ResourceTable::new();
 
         let hal = HalHost::new()?;
 
-        let state = RuntimeState { wasi, hal };
+        let state = RuntimeState { wasi, table, hal };
 
         Ok(Store::new(&self.engine, state))
     }
