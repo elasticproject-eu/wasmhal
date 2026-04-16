@@ -41,22 +41,20 @@ async fn main() -> Result<()> {
     // Create runtime
     let runtime = HalRuntime::new().context("Failed to create HAL runtime")?;
 
-    // Load component
-    let component = runtime
-        .load_component(args.component.clone())
-        .await
-        .context("Failed to load WASM component")?;
-
-    // Create store
-    let mut store = runtime
-        .create_store()
-        .context("Failed to create runtime store")?;
-
     log::info!("Component loaded successfully");
     log::info!("Runtime ready - component has access to HAL interfaces");
 
-    // TODO: Instantiate and call component exports
-    // This will be implemented once we have the actual WIT bindings generated
+    // Run the guest component: instantiate with full HAL linker, call `run` export
+    let report_data = runtime
+        .run_component(args.component)
+        .await
+        .context("Failed to run component")?;
+
+    log::info!(
+        "Component returned {} bytes of report-data",
+        report_data.len()
+    );
+    log::info!("Report-data (hex): {}", hex::encode(&report_data));
 
     Ok(())
 }

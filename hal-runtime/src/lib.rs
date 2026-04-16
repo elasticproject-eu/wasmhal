@@ -12,13 +12,24 @@ use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
 
 mod host_impl;
-use host_impl::HalHost;
+pub use host_impl::HalHost;
+
+mod wit_impl;
+
+// Generate host-side bindings from the consolidated WIT (single package).
+// Targets the `hal-consumer` world: WASM guests *import* all HAL interfaces
+// and *export* run (to provide report-data for attestation).
+wasmtime::component::bindgen!({
+    world: "hal-consumer",
+    path: "wit",
+    async: true,
+});
 
 /// Runtime state that implements WASI and HAL interfaces
 pub struct RuntimeState {
     wasi: WasiCtx,
     table: wasmtime::component::ResourceTable,
-    hal: HalHost,
+    pub(crate) hal: HalHost,
 }
 
 impl WasiView for RuntimeState {
@@ -55,6 +66,14 @@ impl HalRuntime {
         Ok(component)
     }
 
+    /// Create a Linker with WASI + all HAL interfaces registered
+    pub fn create_linker(&self) -> Result<Linker<RuntimeState>> {
+        let mut linker = Linker::new(&self.engine);
+        wasmtime_wasi::add_to_linker_async(&mut linker)?;
+        HalConsumer::add_to_linker(&mut linker, |state: &mut RuntimeState| state)?;
+        Ok(linker)
+    }
+
     /// Create a new store with HAL host implementation
     pub fn create_store(&self) -> Result<Store<RuntimeState>> {
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_env().build();
@@ -65,6 +84,21 @@ impl HalRuntime {
         let state = RuntimeState { wasi, table, hal };
 
         Ok(Store::new(&self.engine, state))
+    }
+
+    /// Instantiate a component with full HAL support and call its `run` export
+    pub async fn run_component(&self, wasm_path: PathBuf) -> Result<Vec<u8>> {
+        let component = self.load_component(wasm_path).await?;
+        let linker = self.create_linker()?;
+        let mut store = self.create_store()?;
+
+        let instance = HalConsumer::instantiate_async(&mut store, &component, &linker).await?;
+        let report_data = instance
+            .elastic_hal_run()
+            .call_run(&mut store)
+            .await?;
+
+        Ok(report_data)
     }
 }
 

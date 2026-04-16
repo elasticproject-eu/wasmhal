@@ -25,7 +25,7 @@ interface resources {
   }
 
   allocate: func(request: allocation-request) -> result<allocation-response, string>;
-  deallocate: func(id: allocation-id) -> result<unit, string>;
+  deallocate: func(id: allocation-id) -> result<_, string>;
   query-available: func(resource-type: resource-type) -> result<u64, string>;
 }
 

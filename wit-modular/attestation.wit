@@ -1,0 +1,22 @@
+// ELASTIC TEE HAL - Attestation Interface
+// TEE attestation with guest-provided report-data
+
+package elastic:attestation@0.1.0;
+
+interface attestation {
+  /// Request an attestation report from the TEE platform.
+  /// The report-data is bound into the hardware attestation report.
+  attestation: func(report-data: list<u8>) -> result<list<u8>, string>;
+}
+
+/// Guest-exported interface to provide report-data for attestation.
+interface run {
+  /// Called by the host to obtain the report-data from the guest.
+  run: func() -> list<u8>;
+}
+
+/// Attestation world: host provides attestation, guest exports run.
+world attestation-world {
+  import attestation;
+  export run;
+}

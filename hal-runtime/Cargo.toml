@@ -33,8 +33,9 @@ serde_json = "1.0"
 # CLI
 clap = { version = "4", features = ["derive"] }
 
-# Async bridging
+# Utils
 futures = "0.3"
+hex = "0.4"
 
 [lib]
 name = "hal_runtime"

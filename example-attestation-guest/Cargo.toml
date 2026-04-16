@@ -1,0 +1,17 @@
+[package]
+name = "example-attestation-guest"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal WASM guest that uses HAL attestation interface"
+
+[dependencies]
+wit-bindgen-rt = { version = "0.44.0", features = ["bitflags"] }
+
+[lib]
+crate-type = ["cdylib"]
+
+[package.metadata.component]
+package = "elastic:hal"
+
+[package.metadata.component.target]
+world = "hal-consumer"
