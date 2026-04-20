@@ -78,7 +78,7 @@ impl ClockInterface {
         self.timezone_offset = if offset_seconds == 0 {
             None
         } else {
-            Some(Duration::from_secs(offset_seconds.abs() as u64))
+            Some(Duration::from_secs(offset_seconds.unsigned_abs() as u64))
         };
 
         Ok(())

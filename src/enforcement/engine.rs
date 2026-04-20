@@ -57,7 +57,7 @@ impl EnforcementLayer {
 
         // Crypto interface
         if policy.capabilities.crypto {
-            let crypto = DefaultCryptoProvider::new();
+            let crypto = DefaultCryptoProvider::default();
             let audited =
                 AuditedCryptoProvider::new(crypto, entity_id.clone(), self.audit_log.clone());
 
@@ -90,17 +90,17 @@ impl EnforcementLayer {
 
         // Capabilities interface
         if policy.capabilities.capabilities {
-            hal.capabilities = Some(Box::new(DefaultCapabilitiesProvider::new()));
+            hal.capabilities = Some(Box::new(DefaultCapabilitiesProvider::default()));
         }
 
         // Random interface
         if policy.capabilities.random {
-            hal.random = Some(Box::new(DefaultRandomProvider::new()));
+            hal.random = Some(Box::new(DefaultRandomProvider::default()));
         }
 
         // Clock interface
         if policy.capabilities.clock {
-            hal.clock = Some(Box::new(DefaultClockProvider::new()));
+            hal.clock = Some(Box::new(DefaultClockProvider::default()));
         }
 
         // Storage interface

@@ -29,5 +29,8 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: Run linter
+        run: cargo clippy -- -D warnings
+
       - name: Build release
         run: cargo build --release

@@ -35,8 +35,8 @@ pub struct DefaultCapabilitiesProvider {
     caps: crate::capabilities::PlatformCapabilities,
 }
 
-impl DefaultCapabilitiesProvider {
-    pub fn new() -> Self {
+impl Default for DefaultCapabilitiesProvider {
+    fn default() -> Self {
         let platform_type = crate::platform::ElasticTeeHal::new()
             .map(|hal| hal.platform_type().clone())
             .unwrap_or(crate::platform::PlatformType::IntelTdx);
@@ -49,32 +49,34 @@ impl DefaultCapabilitiesProvider {
 
 impl CapabilitiesInterface for DefaultCapabilitiesProvider {
     fn list_capabilities(&self) -> Result<Vec<(String, bool, String)>, String> {
-        let mut result = Vec::new();
-        result.push((
-            "random".to_string(),
-            self.caps.features.random,
-            "1.0".to_string(),
-        ));
-        result.push((
-            "crypto".to_string(),
-            self.caps.crypto_support.hardware_acceleration,
-            "1.0".to_string(),
-        ));
-        result.push((
-            "attestation".to_string(),
-            self.caps.features.attestation,
-            "1.0".to_string(),
-        ));
-        result.push((
-            "secure-storage".to_string(),
-            self.caps.features.secure_storage,
-            "1.0".to_string(),
-        ));
-        result.push((
-            "gpu-compute".to_string(),
-            self.caps.features.gpu_compute,
-            "1.0".to_string(),
-        ));
+        let result = vec![
+            (
+                "random".to_string(),
+                self.caps.features.random,
+                "1.0".to_string(),
+            ),
+            (
+                "crypto".to_string(),
+                self.caps.crypto_support.hardware_acceleration,
+                "1.0".to_string(),
+            ),
+            (
+                "attestation".to_string(),
+                self.caps.features.attestation,
+                "1.0".to_string(),
+            ),
+            (
+                "secure-storage".to_string(),
+                self.caps.features.secure_storage,
+                "1.0".to_string(),
+            ),
+            (
+                "gpu-compute".to_string(),
+                self.caps.features.gpu_compute,
+                "1.0".to_string(),
+            ),
+        ];
+
         Ok(result)
     }
 
@@ -92,16 +94,9 @@ impl CapabilitiesInterface for DefaultCapabilitiesProvider {
 }
 
 /// Default crypto provider
+#[derive(Default)]
 pub struct DefaultCryptoProvider {
     crypto: crate::crypto::CryptoInterface,
-}
-
-impl DefaultCryptoProvider {
-    pub fn new() -> Self {
-        Self {
-            crypto: crate::crypto::CryptoInterface::new(),
-        }
-    }
 }
 
 impl CryptoInterface for DefaultCryptoProvider {
@@ -160,16 +155,9 @@ impl CryptoInterface for DefaultCryptoProvider {
 }
 
 /// Default random provider
+#[derive(Default)]
 pub struct DefaultRandomProvider {
     random: crate::random::RandomInterface,
-}
-
-impl DefaultRandomProvider {
-    pub fn new() -> Self {
-        Self {
-            random: crate::random::RandomInterface::new(),
-        }
-    }
 }
 
 impl RandomInterface for DefaultRandomProvider {
@@ -188,16 +176,9 @@ impl RandomInterface for DefaultRandomProvider {
 }
 
 /// Default clock provider
+#[derive(Default)]
 pub struct DefaultClockProvider {
     clock: crate::clock::ClockInterface,
-}
-
-impl DefaultClockProvider {
-    pub fn new() -> Self {
-        Self {
-            clock: crate::clock::ClockInterface::new(),
-        }
-    }
 }
 
 impl ClockInterface for DefaultClockProvider {

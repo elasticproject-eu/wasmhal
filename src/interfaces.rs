@@ -76,10 +76,10 @@ impl HalProvider {
             platform: DefaultPlatformProvider::new()
                 .ok()
                 .map(|p| Box::new(p) as Box<dyn PlatformInterface>),
-            capabilities: Some(Box::new(DefaultCapabilitiesProvider::new())),
-            crypto: Some(Box::new(DefaultCryptoProvider::new())),
-            random: Some(Box::new(DefaultRandomProvider::new())),
-            clock: Some(Box::new(DefaultClockProvider::new())),
+            capabilities: Some(Box::new(DefaultCapabilitiesProvider::default())),
+            crypto: Some(Box::new(DefaultCryptoProvider::default())),
+            random: Some(Box::new(DefaultRandomProvider::default())),
+            clock: Some(Box::new(DefaultClockProvider::default())),
             storage: None, // Optional
         }
     }
