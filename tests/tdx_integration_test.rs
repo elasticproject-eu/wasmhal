@@ -271,3 +271,57 @@ async fn test_tdx_all_interfaces_integration() -> HalResult<()> {
 
     Ok(())
 }
+
+/// End-to-end attestation test: TDX quote → Intel Trust Authority → EAR JWT
+///
+/// Run with your ITA API key:
+///   ITA_API_KEY=<your-key> cargo test test_ita_attestation_roundtrip -- --nocapture --ignored
+#[tokio::test]
+#[ignore] // skipped by default; needs ITA_API_KEY + real TDX hardware
+async fn test_ita_attestation_roundtrip() -> HalResult<()> {
+    println!("\n=== INTEL TRUST AUTHORITY END-TO-END TEST ===");
+
+    // Verify ITA key is present
+    let api_key = std::env::var("ITA_API_KEY")
+        .expect("ITA_API_KEY environment variable must be set to run this test");
+    println!("✓ ITA_API_KEY loaded ({} chars)", api_key.len());
+
+    // 1. Initialise HAL (auto-detects TDX)
+    let hal = ElasticTeeHal::new()?;
+    println!("✓ HAL initialised on {:?}", hal.platform_type());
+
+    // 2. Generate a 32-byte random nonce as report-data
+    let random = elastic_tee_hal::RandomInterface::new();
+    let nonce = random.generate_nonce(32)?;
+    println!("✓ Generated 32-byte nonce: {}", hex::encode(&nonce));
+
+    // 3. Get TDX quote from hardware + submit to ITA via HAL
+    //    (ITA_API_KEY is set so attest() will call ItaClient internally)
+    println!("\n→ Calling hal.attest() with nonce...");
+    let result = hal.attest(&nonce).await?;
+
+    // 4. Interpret the result
+    let result_str = String::from_utf8_lossy(&result);
+
+    if result_str.starts_with("ey") {
+        // Looks like a JWT (base64url always starts with "ey" for {"alg":...})
+        println!("\n✓ ITA returned EAR JWT token!");
+        let parts: Vec<&str> = result_str.splitn(3, '.').collect();
+        println!("  - Header  : {}", parts.get(0).unwrap_or(&"<none>"));
+        println!("  - Payload : {} chars (truncated)", parts.get(1).map(|s| s.len()).unwrap_or(0));
+        println!("  - Full token length: {} bytes", result.len());
+        println!("\n  Next step: send this EAR to your KBS to release the decryption key.");
+    } else if result_str.starts_with("attestation-error:") {
+        panic!("Attestation failed: {}", result_str);
+    } else {
+        // Raw quote returned (ITA submission failed but quote was generated)
+        println!("\n⚠ Raw TDX quote returned ({} bytes)", result.len());
+        println!("  ITA submission may have failed. Check logs above for details.");
+        println!("  Quote prefix (hex): {}", hex::encode(&result[..result.len().min(32)]));
+        panic!("Expected EAR JWT but got raw quote. Check ITA_API_KEY and network connectivity.");
+    }
+
+    println!("\n=== ITA ROUND-TRIP COMPLETE ===");
+    Ok(())
+}
+

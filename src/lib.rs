@@ -26,6 +26,7 @@ pub mod storage;
 // Modular interface system
 pub mod enforcement;
 pub mod interfaces;
+pub mod ita;
 pub mod providers;
 
 // Re-export main types

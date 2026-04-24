@@ -329,87 +329,139 @@ impl ElasticTeeHal {
             report_data.len()
         );
 
-        // TDX attestation uses the TSM (Trust Security Module) interface
-        // The process involves:
-        // 1. Write report data (nonce/user data) to TSM
-        // 2. Trigger quote generation
-        // 3. Read the TD Quote from TSM
-
-        // Prepare report data (64 bytes for TDX)
-        let mut report_data_padded = vec![0u8; 64];
-
-        // Copy user-provided report data (truncate if > 64 bytes)
+        // Pad/truncate report_data to exactly 64 bytes (TDX hardware requirement)
+        let mut report_data_padded = [0u8; 64];
         let copy_len = report_data.len().min(64);
         report_data_padded[..copy_len].copy_from_slice(&report_data[..copy_len]);
 
-        // If report data is smaller than 64 bytes, fill remaining space with timestamp
-        if copy_len < 64 {
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-            let timestamp_bytes = timestamp.to_le_bytes();
-            let fill_len = (64 - copy_len).min(8);
-            report_data_padded[copy_len..copy_len + fill_len]
-                .copy_from_slice(&timestamp_bytes[..fill_len]);
+        // --- Step 1: Get the raw TDX quote from the hardware ---
+        let raw_quote = self.get_tdx_quote_via_tsm(&report_data_padded)?;
+
+        log::info!("TDX quote obtained: {} bytes", raw_quote.len());
+
+        // --- Step 2: Optionally submit to Intel Trust Authority ---
+        // If ITA_API_KEY is set, perform the full remote attestation round-trip
+        // and return the EAR (Entity Attestation Result) JWT as bytes.
+        // Otherwise return the raw quote bytes so the caller can submit later.
+        if let Some(ita_client) = crate::ita::ItaClient::from_env() {
+            // Step 2a: Fetch ITA verifier nonce and derive REPORTDATA
+            match ita_client.fetch_nonce_and_report_data(&report_data_padded).await {
+                Ok((ita_report_data, nonce_state)) => {
+                    // Step 2b: Re-generate the TDX quote with ITA's REPORTDATA
+                    match self.get_tdx_quote_via_tsm(&ita_report_data) {
+                        Ok(ita_quote) => {
+                            // Step 2c: Submit quote + nonce to ITA
+                            match ita_client
+                                .attest_with_nonce(&ita_quote, &report_data_padded, &nonce_state)
+                                .await
+                            {
+                                Ok(ear_jwt) => {
+                                    log::info!("ITA attestation succeeded, returning EAR JWT");
+                                    return Ok(ear_jwt.into_bytes());
+                                }
+                                Err(e) => {
+                                    log::warn!("ITA attest failed ({}), returning raw TDX quote", e);
+                                    eprintln!("[ITA ERROR] {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!("TDX quote gen for ITA failed: {}", e);
+                            eprintln!("[ITA ERROR] Quote generation failed: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("ITA nonce fetch failed ({}), returning raw TDX quote", e);
+                    eprintln!("[ITA ERROR] {}", e);
+                }
+            }
         }
 
-        let timestamp = std::time::SystemTime::now()
+        Ok(raw_quote)
+    }
+
+    /// Obtain a raw TDX DCAP quote via the Linux TSM (Trusted Security Module)
+    /// configfs interface at /sys/kernel/config/tsm/report/.
+    ///
+    /// This is the recommended method on Linux kernels >= 6.7.
+    /// Steps:
+    ///   1. mkdir  /sys/kernel/config/tsm/report/<unique-name>
+    ///   2. write  report_data  →  inblob
+    ///   3. read   outblob      →  raw TDX quote bytes
+    ///   4. rmdir  the entry
+    fn get_tdx_quote_via_tsm(&self, report_data: &[u8; 64]) -> HalResult<Vec<u8>> {
+        let tsm_base = "/sys/kernel/config/tsm/report";
+
+        if !std::path::Path::new(tsm_base).exists() {
+            return Err(HalError::TeeInitializationFailed(
+                "TSM configfs not available at /sys/kernel/config/tsm/report".to_string(),
+            ));
+        }
+
+        // Use a timestamp-derived unique name to avoid collisions
+        let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
-            .as_secs();
+            .as_nanos();
+        let entry_name = format!("hal_quote_{}", ts);
+        let entry_path = format!("{}/{}", tsm_base, entry_name);
 
-        // For production use, this would:
-        // 1. Use /dev/tdx_guest IOCTL TDX_CMD_GET_REPORT0
-        // 2. Or use TSM configfs interface at /sys/kernel/config/tsm/report/
-        // 3. Include TD measurements (MRTD, RTMR registers)
-        // 4. Get Quote from TDX Quoting Enclave
+        // Create the report entry directory
+        std::fs::create_dir(&entry_path).map_err(|e| {
+            HalError::TeeInitializationFailed(format!(
+                "Failed to create TSM report entry '{}': {}",
+                entry_path, e
+            ))
+        })?;
 
-        // Create attestation structure
-        let attestation_data = serde_json::json!({
-            "platform": "intel-tdx",
-            "version": crate::HAL_VERSION,
-            "timestamp": timestamp,
-            "measurements": {
-                "mrtd": self.get_tdx_measurement("MRTD")?,
-                "rtmr0": self.get_tdx_measurement("RTMR0")?,
-                "rtmr1": self.get_tdx_measurement("RTMR1")?,
-                "rtmr2": self.get_tdx_measurement("RTMR2")?,
-                "rtmr3": self.get_tdx_measurement("RTMR3")?,
-                "hal": hex::encode(ring::digest::digest(&ring::digest::SHA256, crate::HAL_VERSION.as_bytes()).as_ref()),
-            },
-            "report_data": hex::encode(&report_data_padded),
-            "tdx_module_version": self.get_tdx_module_version()?,
-        });
+        // The kernel creates inblob/outblob as root-owned (--w------- / r--r--r--).
+        // Fix permissions so our user can write inblob and read outblob.
+        let chmod_result = std::process::Command::new("sudo")
+            .args(["sh", "-c",
+                &format!("chmod o+w {}/inblob && chmod o+r {}/outblob",
+                    entry_path, entry_path)])
+            .status();
+        if chmod_result.map(|s| !s.success()).unwrap_or(true) {
+            let _ = std::fs::remove_dir(&entry_path);
+            return Err(HalError::TeeInitializationFailed(
+                "Failed to chmod TSM entry files (sudo required)".to_string(),
+            ));
+        }
 
-        Ok(attestation_data.to_string().into_bytes())
-    }
+        // Write report_data (inblob) — this triggers the kernel to prepare the quote
+        let inblob_path = format!("{}/inblob", entry_path);
+        if let Err(e) = std::fs::write(&inblob_path, report_data.as_ref()) {
+            let _ = std::fs::remove_dir(&entry_path);
+            return Err(HalError::TeeInitializationFailed(format!(
+                "Failed to write TSM inblob: {}",
+                e
+            )));
+        }
 
-    /// Get TDX measurement from RTMR (Runtime Measurement Register)
-    fn get_tdx_measurement(&self, register: &str) -> HalResult<String> {
-        // In production, this would read from TDX RTMR registers
-        // via TDX Module calls or kernel interfaces
-        // For now, return a placeholder hash
-        let hash = ring::digest::digest(
-            &ring::digest::SHA384,
-            format!(
-                "tdx_{}_{}",
-                register,
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
-            )
-            .as_bytes(),
-        );
-        Ok(hex::encode(hash.as_ref()))
-    }
+        // Read the quote (outblob)
+        let outblob_path = format!("{}/outblob", entry_path);
+        let quote = match std::fs::read(&outblob_path) {
+            Ok(data) => data,
+            Err(e) => {
+                let _ = std::fs::remove_dir(&entry_path);
+                return Err(HalError::TeeInitializationFailed(format!(
+                    "Failed to read TSM outblob (quote): {}",
+                    e
+                )));
+            }
+        };
 
-    /// Get TDX module version
-    fn get_tdx_module_version(&self) -> HalResult<String> {
-        // In production, this would query the TDX module version
-        // For now, return a version string
-        Ok("1.5.0".to_string())
+        // Clean up the report entry
+        let _ = std::fs::remove_dir(&entry_path);
+
+        if quote.is_empty() {
+            return Err(HalError::TeeInitializationFailed(
+                "TSM returned an empty quote".to_string(),
+            ));
+        }
+
+        Ok(quote)
     }
 
     /// Verify an attestation report

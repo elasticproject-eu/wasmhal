@@ -51,7 +51,7 @@ impl platform::Host for RuntimeState {
 #[async_trait]
 impl attestation::Host for RuntimeState {
     async fn attestation(&mut self, report_data: Vec<u8>) -> Result<Vec<u8>, String> {
-        self.hal.platform_attestation(report_data)
+        self.hal.attestation(report_data)
     }
 }
 

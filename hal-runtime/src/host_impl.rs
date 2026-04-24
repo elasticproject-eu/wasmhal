@@ -46,9 +46,8 @@ pub struct HalHost {
 
 impl HalHost {
     pub fn new() -> Result<Self> {
-        let platform = ElasticTeeHal::with_platform(
-            elastic_tee_hal::platform::PlatformType::AmdSev,
-        )?;
+        // Auto-detect the TEE platform (TDX on GCP, SEV-SNP on AWS, etc.)
+        let platform = ElasticTeeHal::new()?;
         let capabilities = futures::executor::block_on(platform.capabilities());
 
         let storage = futures::executor::block_on(async {
@@ -81,7 +80,7 @@ impl HalHost {
     // 1. PLATFORM INTERFACE  (attestation, platform-info)
     // ========================================================================
 
-    pub fn platform_attestation(&mut self, report_data: Vec<u8>) -> Result<Vec<u8>, String> {
+    pub fn attestation(&mut self, report_data: Vec<u8>) -> Result<Vec<u8>, String> {
         futures::executor::block_on(self.platform.attest(&report_data))
             .map_err(|e| e.to_string())
     }
