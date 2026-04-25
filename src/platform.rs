@@ -322,7 +322,26 @@ impl ElasticTeeHal {
         Ok(attestation_data.to_string().into_bytes())
     }
 
-    /// Intel TDX attestation
+    /// Intel TDX attestation.
+    ///
+    /// Two return modes are supported, selected automatically:
+    ///
+    /// 1. **Default (no `ITA_API_KEY` env var):** generate a raw TDX DCAP
+    ///    quote via the Linux TSM, parse out MRTD and RTMR0..3, and return a
+    ///    compact `{"measurements": {...}}` JSON document. This is the format
+    ///    consumed by the Propeller HAL `attestation-test` example
+    ///    (`evidence len ≈ 863`). See [`crate::tdx_quote`] for the parser.
+    ///
+    /// 2. **Intel Trust Authority round-trip (`ITA_API_KEY` set):** perform
+    ///    the ITA v2 verifier-nonce protocol — fetch nonce, regenerate the
+    ///    quote with `REPORTDATA = SHA512(nonce.val || nonce.iat ||
+    ///    user_data)`, submit quote + nonce, and return the resulting EAR
+    ///    JWT. This path is for KBS-style integrations that need a verified
+    ///    appraisal token rather than raw measurements.
+    ///
+    /// If the ITA round-trip is requested but fails, we fall back to the raw
+    /// TDX quote bytes (not the measurements JSON) so the caller can retry
+    /// the submission themselves.
     async fn intel_tdx_attest(&self, report_data: &[u8]) -> HalResult<Vec<u8>> {
         log::info!(
             "Generating Intel TDX attestation quote with {} bytes of report data",
@@ -342,7 +361,8 @@ impl ElasticTeeHal {
         // --- Step 2: Optionally submit to Intel Trust Authority ---
         // If ITA_API_KEY is set, perform the full remote attestation round-trip
         // and return the EAR (Entity Attestation Result) JWT as bytes.
-        // Otherwise return the raw quote bytes so the caller can submit later.
+        // On any failure here, fall through to returning the raw quote bytes
+        // so the caller can retry the submission.
         if let Some(ita_client) = crate::ita::ItaClient::from_env() {
             // Step 2a: Fetch ITA verifier nonce and derive REPORTDATA
             match ita_client.fetch_nonce_and_report_data(&report_data_padded).await {
@@ -376,9 +396,31 @@ impl ElasticTeeHal {
                     eprintln!("[ITA ERROR] {}", e);
                 }
             }
+            // ITA was requested but failed somewhere — return the raw quote
+            // so the caller can retry, rather than the measurements JSON.
+            return Ok(raw_quote);
         }
 
-        Ok(raw_quote)
+        // --- Step 3: Default path — return parsed measurements JSON ---
+        // This is what Propeller's WASM `attestation-test` workload prints
+        // as `evidence: {...}`.
+        match crate::tdx_quote::TdxMeasurements::parse(&raw_quote) {
+            Ok(measurements) => {
+                let hal_hash = crate::tdx_quote::compute_hal_hash();
+                let evidence_json = measurements.to_evidence_json(&hal_hash);
+                log::info!(
+                    "Returning measurements JSON ({} bytes)",
+                    evidence_json.len()
+                );
+                Ok(evidence_json.into_bytes())
+            }
+            Err(e) => {
+                // Quote was unparseable — surface the raw quote rather than
+                // hide a hardware/firmware oddity behind synthetic JSON.
+                log::warn!("TDX quote parse failed ({}), returning raw quote", e);
+                Ok(raw_quote)
+            }
+        }
     }
 
     /// Obtain a raw TDX DCAP quote via the Linux TSM (Trusted Security Module)

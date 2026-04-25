@@ -28,6 +28,7 @@ pub mod enforcement;
 pub mod interfaces;
 pub mod ita;
 pub mod providers;
+pub mod tdx_quote;
 
 // Re-export main types
 pub use capabilities::PlatformCapabilities;
