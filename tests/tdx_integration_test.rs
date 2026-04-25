@@ -295,10 +295,12 @@ async fn test_ita_attestation_roundtrip() -> HalResult<()> {
     let nonce = random.generate_nonce(32)?;
     println!("✓ Generated 32-byte nonce: {}", hex::encode(&nonce));
 
-    // 3. Get TDX quote from hardware + submit to ITA via HAL
-    //    (ITA_API_KEY is set so attest() will call ItaClient internally)
-    println!("\n→ Calling hal.attest() with nonce...");
-    let result = hal.attest(&nonce).await?;
+    // 3. Get TDX quote from hardware + submit to ITA via the dedicated
+    //    server-side API. (hal.attest() always returns measurements JSON;
+    //    the EAR JWT is only produced by attest_with_ita().)
+    println!("\n→ Calling hal.attest_with_ita() with nonce...");
+    let ear_jwt = hal.attest_with_ita(&nonce).await?;
+    let result = ear_jwt.into_bytes();
 
     // 4. Interpret the result
     let result_str = String::from_utf8_lossy(&result);
