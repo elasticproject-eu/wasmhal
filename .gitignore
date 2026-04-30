@@ -66,3 +66,11 @@ test-results/
 # Backup files
 *.bak
 *.backup
+
+# Thales-internal relying party (do not redistribute)
+/relying_party/
+/relying_party.zip
+
+# Secrets — ITA API key
+.ita_key.env
+*.ita_key.env
