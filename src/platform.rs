@@ -471,9 +471,14 @@ impl ElasticTeeHal {
         // The kernel creates inblob/outblob as root-owned (--w------- / r--r--r--).
         // Fix permissions so our user can write inblob and read outblob.
         let chmod_result = std::process::Command::new("sudo")
-            .args(["sh", "-c",
-                &format!("chmod o+w {}/inblob && chmod o+r {}/outblob",
-                    entry_path, entry_path)])
+            .args([
+                "sh",
+                "-c",
+                &format!(
+                    "chmod o+w {}/inblob && chmod o+r {}/outblob",
+                    entry_path, entry_path
+                ),
+            ])
             .status();
         if chmod_result.map(|s| !s.success()).unwrap_or(true) {
             let _ = std::fs::remove_dir(&entry_path);

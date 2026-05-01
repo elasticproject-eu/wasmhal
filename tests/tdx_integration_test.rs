@@ -310,7 +310,10 @@ async fn test_ita_attestation_roundtrip() -> HalResult<()> {
         println!("\n✓ ITA returned EAR JWT token!");
         let parts: Vec<&str> = result_str.splitn(3, '.').collect();
         println!("  - Header  : {}", parts.get(0).unwrap_or(&"<none>"));
-        println!("  - Payload : {} chars (truncated)", parts.get(1).map(|s| s.len()).unwrap_or(0));
+        println!(
+            "  - Payload : {} chars (truncated)",
+            parts.get(1).map(|s| s.len()).unwrap_or(0)
+        );
         println!("  - Full token length: {} bytes", result.len());
         println!("\n  Next step: send this EAR to your KBS to release the decryption key.");
     } else if result_str.starts_with("attestation-error:") {
@@ -319,11 +322,13 @@ async fn test_ita_attestation_roundtrip() -> HalResult<()> {
         // Raw quote returned (ITA submission failed but quote was generated)
         println!("\n⚠ Raw TDX quote returned ({} bytes)", result.len());
         println!("  ITA submission may have failed. Check logs above for details.");
-        println!("  Quote prefix (hex): {}", hex::encode(&result[..result.len().min(32)]));
+        println!(
+            "  Quote prefix (hex): {}",
+            hex::encode(&result[..result.len().min(32)])
+        );
         panic!("Expected EAR JWT but got raw quote. Check ITA_API_KEY and network connectivity.");
     }
 
     println!("\n=== ITA ROUND-TRIP COMPLETE ===");
     Ok(())
 }
-

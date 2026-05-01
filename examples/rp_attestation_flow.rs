@@ -89,7 +89,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let status = resp.status();
     let body_text = resp.text().await?;
     if !status.is_success() {
-        return Err(format!("relying party rejected attestation: HTTP {} — {}", status, body_text).into());
+        return Err(format!(
+            "relying party rejected attestation: HTTP {} — {}",
+            status, body_text
+        )
+        .into());
     }
 
     let body: Value = serde_json::from_str(&body_text)?;
@@ -110,7 +114,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // 5. Fetch encrypted WASM.
     let wasm_url = format!("{}{}", rp_base.trim_end_matches('/'), wasm_url_path);
     println!("→ GET {}", wasm_url);
-    let enc = http.get(&wasm_url).send().await?.error_for_status()?.bytes().await?;
+    let enc = http
+        .get(&wasm_url)
+        .send()
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
     println!("✓ Encrypted WASM downloaded ({} bytes)", enc.len());
 
     // 6. AES-256-GCM-decrypt.  Layout written by the relying party:

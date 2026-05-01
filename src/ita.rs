@@ -90,10 +90,7 @@ impl ItaClient {
             .unwrap_or_else(|_| "<unreadable body>".to_string());
 
         if !status.is_success() {
-            return Err(format!(
-                "ITA nonce returned HTTP {}: {}",
-                status, body_text
-            ));
+            return Err(format!("ITA nonce returned HTTP {}: {}", status, body_text));
         }
 
         let nonce_json: serde_json::Value = serde_json::from_str(&body_text)
@@ -131,7 +128,14 @@ impl ItaClient {
         report_data.copy_from_slice(&digest);
 
         log::debug!("ITA nonce fetched, REPORTDATA computed (SHA-512, 64 bytes)");
-        Ok((report_data, ItaNonceState { val_b64, iat_b64, sig_b64 }))
+        Ok((
+            report_data,
+            ItaNonceState {
+                val_b64,
+                iat_b64,
+                sig_b64,
+            },
+        ))
     }
 
     /// Step 2 of the ITA attestation flow.
@@ -185,10 +189,7 @@ impl ItaClient {
             .unwrap_or_else(|_| "<unreadable body>".to_string());
 
         if !status.is_success() {
-            return Err(format!(
-                "ITA returned HTTP {}: {}",
-                status, body_text
-            ));
+            return Err(format!("ITA returned HTTP {}: {}", status, body_text));
         }
 
         let ear = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body_text) {
