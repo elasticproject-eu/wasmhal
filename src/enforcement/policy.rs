@@ -325,7 +325,7 @@ mod tests {
 
     #[test]
     fn test_policy_engine() {
-        let mut engine = PolicyEngine::new();
+        let mut engine = PolicyEngine::default();
 
         let policy = EntityPolicy::new(EntityId::new("test-entity"), CapabilitySet::none());
 

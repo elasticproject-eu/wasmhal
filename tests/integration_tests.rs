@@ -1,77 +1,84 @@
+use elastic_tee_hal::platform::PlatformType;
 use elastic_tee_hal::*;
 
 #[tokio::test]
 async fn test_platform_integration() {
     let hal = ElasticTeeHal::new().expect("Failed to create HAL");
-    let platform = hal.platform();
 
-    let info = platform
-        .get_platform_info()
-        .await
-        .expect("Failed to get platform info");
-    assert!(!info.platform_type.is_empty());
-    assert!(!info.version.is_empty());
+    // After construction the HAL must be initialised and report a known platform.
+    assert!(hal.is_initialized());
+    let platform_type = hal.platform_type().clone();
+    assert!(matches!(
+        platform_type,
+        PlatformType::AmdSev | PlatformType::IntelTdx
+    ));
 }
 
 #[tokio::test]
 async fn test_crypto_integration() {
-    let hal = ElasticTeeHal::new().expect("Failed to create HAL");
-    let crypto = hal.crypto();
+    // The crypto interface is independent of the HAL platform layer.
+    let crypto = CryptoInterface::new();
 
-    // Test key generation
-    let keypair = crypto
-        .generate_keypair()
+    // Symmetric round-trip via AES-256-GCM.
+    let key = crypto
+        .generate_symmetric_key("AES-256-GCM")
         .await
-        .expect("Failed to generate keypair");
-    assert!(!keypair.public_key.is_empty());
-    assert!(!keypair.private_key.is_empty());
+        .expect("Failed to generate symmetric key");
+    assert_eq!(key.len(), 32);
 
-    // Test signing and verification
-    let data = b"test message";
-    let signature = crypto
-        .sign(data.to_vec(), keypair.private_key.clone())
+    let plaintext = b"test message";
+    let ciphertext = crypto
+        .symmetric_encrypt("AES-256-GCM", &key, plaintext, None)
         .await
-        .expect("Failed to sign data");
+        .expect("Failed to encrypt");
+    assert_ne!(ciphertext, plaintext.to_vec());
 
-    let verified = crypto
-        .verify(data.to_vec(), signature, keypair.public_key)
+    let decrypted = crypto
+        .symmetric_decrypt("AES-256-GCM", &key, &ciphertext, None)
         .await
-        .expect("Failed to verify signature");
-    assert!(verified);
+        .expect("Failed to decrypt");
+    assert_eq!(decrypted, plaintext.to_vec());
+
+    // Hashing sanity-check.
+    let digest = crypto
+        .hash_data("SHA-256", plaintext)
+        .await
+        .expect("Failed to hash data");
+    assert_eq!(digest.len(), 32);
 }
 
 #[tokio::test]
 async fn test_storage_integration() {
-    let hal = ElasticTeeHal::new().expect("Failed to create HAL");
-    let storage = hal.storage();
+    let tmp = tempfile::tempdir().expect("Failed to create tempdir");
+    let storage = StorageInterface::new(tmp.path())
+        .await
+        .expect("Failed to create storage interface");
 
-    // Create container
+    // Open (or create) a plaintext container.
     let container = storage
-        .create_container("test-container")
+        .open_container("test-container", false)
         .await
-        .expect("Failed to create container");
+        .expect("Failed to open container");
 
-    // Store and retrieve data
     let test_data = b"Hello, TEE!";
-    let _object_id = storage
-        .store_object(container, "test-key", test_data.to_vec())
+    storage
+        .write_object(container, "test-key", test_data)
         .await
-        .expect("Failed to store object");
+        .expect("Failed to write object");
 
     let retrieved = storage
-        .retrieve_object(container, "test-key")
+        .read_object(container, "test-key")
         .await
-        .expect("Failed to retrieve object");
-
+        .expect("Failed to read object");
     assert_eq!(retrieved, test_data.to_vec());
 
-    // Clean up
+    // Clean up.
     storage
         .delete_object(container, "test-key")
         .await
         .expect("Failed to delete object");
     storage
-        .delete_container(container)
+        .close_container(container)
         .await
-        .expect("Failed to delete container");
+        .expect("Failed to close container");
 }

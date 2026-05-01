@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn test_enforcement_layer() {
-        let mut policy_engine = PolicyEngine::new();
+        let mut policy_engine = PolicyEngine::default();
 
         // Create a restricted entity
         let entity_id = EntityId::new("test-entity");
