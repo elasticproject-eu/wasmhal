@@ -298,7 +298,10 @@ impl ElasticTeeHal {
             report_data.len()
         );
 
-        // Truncate or pad report_data to 64 bytes for SEV-SNP
+        // Pad report_data to 64 bytes for SEV-SNP
+        if report_data.len() > 64 {
+            return Err(HalError::InvalidParameter("Userdata too long".into()));
+        }
         let mut report_data_padded = vec![0u8; 64];
         let copy_len = report_data.len().min(64);
         report_data_padded[..copy_len].copy_from_slice(&report_data[..copy_len]);
@@ -345,7 +348,10 @@ impl ElasticTeeHal {
             report_data.len()
         );
 
-        // Pad/truncate report_data to exactly 64 bytes (TDX hardware requirement)
+        // Pad report_data to exactly 64 bytes (TDX hardware requirement)
+        if report_data.len() > 64 {
+            return Err(HalError::InvalidParameter("Userdata too long".into()));
+        }
         let mut report_data_padded = [0u8; 64];
         let copy_len = report_data.len().min(64);
         report_data_padded[..copy_len].copy_from_slice(&report_data[..copy_len]);
@@ -411,6 +417,9 @@ impl ElasticTeeHal {
         })?;
 
         // Pad user_data to 64 bytes for ITA's runtime_data field.
+        if user_data.len() > 64 {
+            return Err(HalError::InvalidParameter("Userdata too long".into()));
+        }
         let mut user_data_padded = [0u8; 64];
         let copy_len = user_data.len().min(64);
         user_data_padded[..copy_len].copy_from_slice(&user_data[..copy_len]);
