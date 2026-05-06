@@ -7,6 +7,7 @@ use elastic_tee_hal::{
 use std::time::Duration;
 
 #[tokio::test]
+#[ignore = "requires Intel TDX hardware (/dev/tdx_guest) and ITA_API_KEY"]
 async fn test_tdx_platform_detection() -> HalResult<()> {
     println!("\n=== INTEL TDX PLATFORM VERIFICATION ===");
 
@@ -41,6 +42,7 @@ async fn test_tdx_platform_detection() -> HalResult<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires Intel TDX hardware (/dev/tdx_guest) and ITA_API_KEY"]
 async fn test_tdx_clock_interface() -> HalResult<()> {
     println!("\n=== INTEL TDX CLOCK INTERFACE TEST ===");
 
@@ -71,6 +73,7 @@ async fn test_tdx_clock_interface() -> HalResult<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires Intel TDX hardware (/dev/tdx_guest) and ITA_API_KEY"]
 async fn test_tdx_random_interface() -> HalResult<()> {
     println!("\n=== INTEL TDX RANDOM INTERFACE TEST ===");
     println!("Testing hardware RNG (RDRAND/RDSEED)");
@@ -123,6 +126,7 @@ async fn test_tdx_random_interface() -> HalResult<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires Intel TDX hardware (/dev/tdx_guest) and ITA_API_KEY"]
 async fn test_tdx_storage_interface() -> HalResult<()> {
     println!("\n=== INTEL TDX STORAGE INTERFACE TEST ===");
 
@@ -180,6 +184,7 @@ async fn test_tdx_storage_interface() -> HalResult<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires Intel TDX hardware (/dev/tdx_guest) and ITA_API_KEY"]
 async fn test_tdx_network_interface() -> HalResult<()> {
     println!("\n=== INTEL TDX NETWORK INTERFACE TEST ===");
     println!("Testing TCP sockets with TDX network isolation");
@@ -212,6 +217,7 @@ async fn test_tdx_network_interface() -> HalResult<()> {
 }
 
 #[tokio::test]
+#[ignore = "requires Intel TDX hardware (/dev/tdx_guest) and ITA_API_KEY"]
 async fn test_tdx_all_interfaces_integration() -> HalResult<()> {
     println!("\n=== INTEL TDX FULL INTEGRATION TEST ===");
     println!("Testing all 4 WASI interfaces together");
@@ -277,7 +283,7 @@ async fn test_tdx_all_interfaces_integration() -> HalResult<()> {
 /// Run with your ITA API key:
 ///   ITA_API_KEY=<your-key> cargo test test_ita_attestation_roundtrip -- --nocapture --ignored
 #[tokio::test]
-#[ignore] // skipped by default; needs ITA_API_KEY + real TDX hardware
+#[ignore = "requires Intel TDX hardware (/dev/tdx_guest) and ITA_API_KEY"]
 async fn test_ita_attestation_roundtrip() -> HalResult<()> {
     println!("\n=== INTEL TRUST AUTHORITY END-TO-END TEST ===");
 

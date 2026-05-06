@@ -106,7 +106,7 @@ impl RandomInterface {
 
     /// Generate random salt for password hashing
     pub fn generate_salt(&self, length: usize) -> HalResult<Vec<u8>> {
-        if (16..=64).contains(&length) {
+        if !(16..=64).contains(&length) {
             return Err(HalError::InvalidParameter(
                 "Salt length must be between 16 and 64 bytes".to_string(),
             ));

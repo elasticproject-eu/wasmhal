@@ -19,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("1. Setting up enforcement layer with 4 entities:\n");
 
-    let mut policy_engine = PolicyEngine::new();
+    let mut policy_engine = PolicyEngine::default();
 
     // Entity A: Attestation Service (minimal privileges - only platform)
     let attestation_service_id = EntityId::new("attestation-service");
