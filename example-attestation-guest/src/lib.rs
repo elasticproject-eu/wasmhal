@@ -17,10 +17,7 @@ impl bindings::exports::elastic::hal::run::Guest for Component {
     fn run() -> Vec<u8> {
         // 1. Query platform info
         let info = platform::get_platform_info();
-        let _ = format!(
-            "Running on {} v{}",
-            info.platform_type, info.version
-        );
+        let _ = format!("Running on {} v{}", info.platform_type, info.version);
 
         // 2. Generate random nonce as report-data
         let report_data = match random::get_random_bytes(32) {

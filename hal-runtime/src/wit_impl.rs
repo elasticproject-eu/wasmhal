@@ -128,10 +128,7 @@ impl crypto::Host for RuntimeState {
         self.hal.crypto_create_context()
     }
 
-    async fn destroy_context(
-        &mut self,
-        handle: crypto::CryptoContextHandle,
-    ) -> Result<(), String> {
+    async fn destroy_context(&mut self, handle: crypto::CryptoContextHandle) -> Result<(), String> {
         self.hal.crypto_destroy_context(handle)
     }
 }
@@ -141,17 +138,11 @@ impl crypto::Host for RuntimeState {
 // ============================================================================
 #[async_trait]
 impl storage::Host for RuntimeState {
-    async fn create_container(
-        &mut self,
-        name: String,
-    ) -> Result<storage::ContainerHandle, String> {
+    async fn create_container(&mut self, name: String) -> Result<storage::ContainerHandle, String> {
         self.hal.storage_create_container(&name)
     }
 
-    async fn open_container(
-        &mut self,
-        name: String,
-    ) -> Result<storage::ContainerHandle, String> {
+    async fn open_container(&mut self, name: String) -> Result<storage::ContainerHandle, String> {
         self.hal.storage_open_container(&name)
     }
 
@@ -235,11 +226,7 @@ impl sockets::Host for RuntimeState {
         self.hal.sockets_bind(socket, &a)
     }
 
-    async fn listen(
-        &mut self,
-        socket: sockets::SocketHandle,
-        backlog: u32,
-    ) -> Result<(), String> {
+    async fn listen(&mut self, socket: sockets::SocketHandle, backlog: u32) -> Result<(), String> {
         self.hal.sockets_listen(socket, backlog)
     }
 
@@ -262,11 +249,7 @@ impl sockets::Host for RuntimeState {
         self.hal.sockets_accept(socket)
     }
 
-    async fn send(
-        &mut self,
-        socket: sockets::SocketHandle,
-        data: Vec<u8>,
-    ) -> Result<u32, String> {
+    async fn send(&mut self, socket: sockets::SocketHandle, data: Vec<u8>) -> Result<u32, String> {
         self.hal.sockets_send(socket, &data)
     }
 
@@ -429,10 +412,7 @@ impl events::Host for RuntimeState {
         self.hal.events_subscribe(et)
     }
 
-    async fn unsubscribe(
-        &mut self,
-        handle: events::EventSubscriptionHandle,
-    ) -> Result<(), String> {
+    async fn unsubscribe(&mut self, handle: events::EventSubscriptionHandle) -> Result<(), String> {
         self.hal.events_unsubscribe(handle)
     }
 

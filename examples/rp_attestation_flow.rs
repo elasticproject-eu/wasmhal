@@ -54,23 +54,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rp_base = std::env::var("RP_URL").unwrap_or_else(|_| "http://127.0.0.1:8087".to_string());
     let output_path = std::env::var("OUTPUT").unwrap_or_else(|_| "./decrypted.wasm".to_string());
 
-    println!("=== Attester → Relying Party demo ===");
-    println!("Relying party : {}", rp_base);
-    println!("Output WASM   : {}", output_path);
+    log::info!("=== Attester → Relying Party demo ===");
+    log::info!("Relying party : {}", rp_base);
+    log::info!("Output WASM   : {}", output_path);
 
     // 1. Initialise HAL.
     let hal = ElasticTeeHal::new()?;
-    println!("✓ HAL initialised on {:?}", hal.platform_type());
+    log::info!("✓ HAL initialised on {:?}", hal.platform_type());
 
     // 2. Generate nonce.
     let random = RandomInterface::new();
     let nonce = random.generate_nonce(32)?;
-    println!("✓ 32-byte nonce: {}", hex::encode(&nonce));
+    log::info!("✓ 32-byte nonce: {}", hex::encode(&nonce));
 
     // 3. ITA round-trip → EAR JWT.
-    println!("→ Submitting TDX quote to Intel Trust Authority…");
+    log::info!("→ Submitting TDX quote to Intel Trust Authority…");
     let ear_jwt = hal.attest_with_ita(&nonce).await?;
-    println!("✓ EAR JWT received ({} bytes)", ear_jwt.len());
+    log::info!("✓ EAR JWT received ({} bytes)", ear_jwt.len());
 
     // 4. POST EAR to relying party.
     let http = reqwest::Client::builder()
@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .build()?;
 
     let attest_url = format!("{}/attest", rp_base.trim_end_matches('/'));
-    println!("→ POST {}", attest_url);
+    log::info!("→ POST {}", attest_url);
 
     let resp = http
         .post(&attest_url)
@@ -109,11 +109,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if key_bytes.len() != 32 {
         return Err(format!("key length is {} bytes; expected 32", key_bytes.len()).into());
     }
-    println!("✓ Attestation accepted, AES-256 key released");
+    log::info!("✓ Attestation accepted, AES-256 key released");
 
     // 5. Fetch encrypted WASM.
     let wasm_url = format!("{}{}", rp_base.trim_end_matches('/'), wasm_url_path);
-    println!("→ GET {}", wasm_url);
+    log::info!("→ GET {}", wasm_url);
     let enc = http
         .get(&wasm_url)
         .send()
@@ -121,7 +121,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .error_for_status()?
         .bytes()
         .await?;
-    println!("✓ Encrypted WASM downloaded ({} bytes)", enc.len());
+    log::info!("✓ Encrypted WASM downloaded ({} bytes)", enc.len());
 
     // 6. AES-256-GCM-decrypt.  Layout written by the relying party:
     //    enc = nonce(12) || ciphertext_with_auth_tag
@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .map_err(|e| format!("AES-GCM decrypt failed: {}", e))?;
 
     std::fs::write(&output_path, &plaintext)?;
-    println!(
+    log::info!(
         "✓ Decrypted WASM written to {} ({} bytes)",
         output_path,
         plaintext.len()
@@ -146,14 +146,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //    from `_start`. We run it here so the demo closes the loop:
     //      attest → release key → decrypt → execute.
     if std::env::var("SKIP_RUN").ok().as_deref() != Some("1") {
-        println!("\n→ Executing decrypted WASM via wasmtime…");
+        log::info!("\n→ Executing decrypted WASM via wasmtime…");
         run_wasi_module(&plaintext).await?;
-        println!("✓ WASM execution finished");
+        log::info!("✓ WASM execution finished");
     } else {
-        println!("(SKIP_RUN=1 set — not executing the decrypted module)");
+        log::info!("(SKIP_RUN=1 set — not executing the decrypted module)");
     }
 
-    println!("=== DONE ===");
+    log::info!("=== DONE ===");
 
     Ok(())
 }
@@ -181,7 +181,7 @@ async fn run_wasi_module(wasm_bytes: &[u8]) -> Result<(), Box<dyn Error>> {
 
     let instance = linker.instantiate_async(&mut store, &module).await?;
 
-    println!("--- BEGIN WASM stdout ---");
+    log::info!("--- BEGIN WASM stdout ---");
     if let Ok(start) = instance.get_typed_func::<(), ()>(&mut store, "_start") {
         start.call_async(&mut store, ()).await?;
     } else if let Ok(main) = instance.get_typed_func::<(), ()>(&mut store, "main") {
@@ -189,6 +189,6 @@ async fn run_wasi_module(wasm_bytes: &[u8]) -> Result<(), Box<dyn Error>> {
     } else {
         return Err("WASM has no `_start` or `main` export".into());
     }
-    println!("--- END WASM stdout ---");
+    log::info!("--- END WASM stdout ---");
     Ok(())
 }

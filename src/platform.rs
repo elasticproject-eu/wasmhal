@@ -128,11 +128,11 @@ impl ElasticTeeHal {
             // Check for TSM support (Trust Security Module for attestation)
             let has_tsm = std::path::Path::new("/sys/kernel/config/tsm/report").exists();
 
-            println!("AMD SEV Detection:");
-            println!("  - AMD CPU: {}", is_amd);
-            println!("  - /dev/sev-guest: {}", has_sev_guest);
-            println!("  - /dev/sev: {}", has_sev_dev);
-            println!("  - TSM support: {}", has_tsm);
+            log::debug!("AMD SEV Detection:");
+            log::debug!("  - AMD CPU: {}", is_amd);
+            log::debug!("  - /dev/sev-guest: {}", has_sev_guest);
+            log::debug!("  - /dev/sev: {}", has_sev_dev);
+            log::debug!("  - TSM support: {}", has_tsm);
 
             is_amd && (has_sev_guest || has_sev_dev) && has_tsm
         }
@@ -173,11 +173,11 @@ impl ElasticTeeHal {
             // Check for TDX guest flag in CPU features
             let has_tdx_flag = Self::has_tdx_cpu_flag();
 
-            println!("Intel TDX Detection:");
-            println!("  - Intel CPU: {}", is_intel);
-            println!("  - /dev/tdx_guest: {}", has_tdx_guest);
-            println!("  - TSM support: {}", has_tsm);
-            println!("  - TDX CPU flag: {}", has_tdx_flag);
+            log::debug!("Intel TDX Detection:");
+            log::debug!("  - Intel CPU: {}", is_intel);
+            log::debug!("  - /dev/tdx_guest: {}", has_tdx_guest);
+            log::debug!("  - TSM support: {}", has_tsm);
+            log::debug!("  - TDX CPU flag: {}", has_tdx_flag);
 
             is_intel && has_tdx_guest && has_tsm && has_tdx_flag
         }

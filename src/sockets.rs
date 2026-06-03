@@ -616,6 +616,13 @@ mod tests {
     use super::*;
     use tokio::time::{timeout, Duration};
 
+    fn init() {
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| {
+            let _ = env_logger::builder().is_test(true).try_init();
+        });
+    }
+
     #[tokio::test]
     async fn test_tcp_socket_creation() {
         let socket_interface = SocketInterface::new();
@@ -648,27 +655,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_tcp_connection() {
-        println!("=== SOCKET DEMO: TCP Connection & Data Transfer ===");
+        init();
+        log::info!("=== SOCKET DEMO: TCP Connection & Data Transfer ===");
 
         // First verify we're running in SEV-SNP environment
         match crate::ElasticTeeHal::new() {
             Ok(hal) => {
                 if matches!(hal.platform_type(), crate::platform::PlatformType::AmdSev) {
-                    println!("✓ VERIFIED: Running in AMD SEV-SNP Trusted Execution Environment");
-                    println!("  - TEE Device: /dev/sev-guest detected");
-                    println!("  - Network traffic is TEE-isolated");
-                    println!("  - Memory encryption protects data in transit");
+                    log::info!("✓ VERIFIED: Running in AMD SEV-SNP Trusted Execution Environment");
+                    log::debug!("  - TEE Device: /dev/sev-guest detected");
+                    log::debug!("  - Network traffic is TEE-isolated");
+                    log::debug!("  - Memory encryption protects data in transit");
                 } else {
-                    println!("✓ TEE Environment detected: {:?}", hal.platform_type());
-                    println!("  - Network traffic is TEE-isolated");
-                    println!("  - Memory encryption protects data in transit");
+                    log::info!("✓ TEE Environment detected: {:?}", hal.platform_type());
+                    log::debug!("  - Network traffic is TEE-isolated");
+                    log::debug!("  - Memory encryption protects data in transit");
                 }
             }
             Err(_) => {
-                println!("⚠ Warning: Not running in verified TEE environment");
+                log::warn!("⚠ Warning: Not running in verified TEE environment");
             }
         }
-        println!();
+        log::info!("");
 
         let socket_interface = SocketInterface::new();
 
@@ -683,16 +691,16 @@ mod tests {
             .unwrap();
         let listen_addr = listener_info.local_address.unwrap();
 
-        println!("✓ Created TCP listener on {}", listen_addr);
-        println!("  - Socket type: {}", listener_info.socket_type);
-        println!("  - Handle: {}", listener_handle);
+        log::info!("✓ Created TCP listener on {}", listen_addr);
+        log::debug!("  - Socket type: {}", listener_info.socket_type);
+        log::debug!("  - Handle: {}", listener_handle);
 
         // Connect in background task
         let socket_interface_clone = Arc::new(socket_interface);
         let connect_task = {
             let socket_interface = socket_interface_clone.clone();
             let addr = format!("127.0.0.1:{}", listen_addr.port());
-            println!("✓ Initiating connection to {}", addr);
+            log::info!("✓ Initiating connection to {}", addr);
             tokio::spawn(async move { socket_interface.tcp_connect(&addr).await })
         };
 
@@ -706,19 +714,19 @@ mod tests {
         let accept_handle = accept_result
             .expect("Accept timeout")
             .expect("Accept failed");
-        println!("✓ Accepted incoming connection");
-        println!("  - Server-side handle: {}", accept_handle);
+        log::info!("✓ Accepted incoming connection");
+        log::debug!("  - Server-side handle: {}", accept_handle);
 
         let connect_handle = connect_task
             .await
             .expect("Connect task failed")
             .expect("Connect failed");
-        println!("✓ Client connection established");
-        println!("  - Client-side handle: {}", connect_handle);
+        log::info!("✓ Client connection established");
+        log::debug!("  - Client-side handle: {}", connect_handle);
 
         // Test data transfer
         let test_message = b"Hello from ELASTIC TEE HAL!";
-        println!(
+        log::info!(
             "✓ Sending test message: {:?}",
             std::str::from_utf8(test_message).unwrap()
         );
@@ -727,16 +735,16 @@ mod tests {
             .socket_write(connect_handle, test_message)
             .await
             .unwrap();
-        println!("  - Bytes sent: {}", write_result.bytes_transferred);
+        log::debug!("  - Bytes sent: {}", write_result.bytes_transferred);
 
         let mut buffer = [0u8; 1024];
         let read_result = socket_interface_clone
             .socket_read(accept_handle, &mut buffer)
             .await
             .unwrap();
-        println!("✓ Received message on server side");
-        println!("  - Bytes received: {}", read_result.bytes_transferred);
-        println!(
+        log::info!("✓ Received message on server side");
+        log::debug!("  - Bytes received: {}", read_result.bytes_transferred);
+        log::debug!(
             "  - Message: {:?}",
             std::str::from_utf8(&buffer[..read_result.bytes_transferred]).unwrap()
         );
@@ -744,12 +752,12 @@ mod tests {
         // Verify message integrity
         let received_data = &buffer[..read_result.bytes_transferred];
         let message_verified = received_data == test_message;
-        println!(
+        log::info!(
             "✓ Message integrity verification: {}",
             if message_verified { "PASSED" } else { "FAILED" }
         );
 
-        println!("=== SOCKET DEMO COMPLETE ===\n");
+        log::info!("=== SOCKET DEMO COMPLETE ===\n");
 
         // Verify both handles are valid
         assert!(accept_handle > 0);
@@ -834,6 +842,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_key_context_operations() {
+        init();
         let socket_interface = SocketInterface::new();
 
         // Test that PKCS12 parsing doesn't crash with placeholder data
@@ -847,9 +856,9 @@ mod tests {
         // For the placeholder implementation, we expect this to fail with a crypto error
         // In a real implementation with proper PKCS12 parsing, this would succeed
         match &result {
-            Ok(_) => println!("Key context operation succeeded"),
+            Ok(_) => log::info!("Key context operation succeeded"),
             Err(e) => {
-                println!(
+                log::info!(
                     "Key context operation failed as expected with placeholder data: {:?}",
                     e
                 );
