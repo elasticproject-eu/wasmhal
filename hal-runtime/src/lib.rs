@@ -93,10 +93,7 @@ impl HalRuntime {
         let mut store = self.create_store()?;
 
         let instance = HalConsumer::instantiate_async(&mut store, &component, &linker).await?;
-        let report_data = instance
-            .elastic_hal_run()
-            .call_run(&mut store)
-            .await?;
+        let report_data = instance.elastic_hal_run().call_run(&mut store).await?;
 
         Ok(report_data)
     }

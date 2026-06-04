@@ -6,18 +6,18 @@
 
 use anyhow::Result;
 use elastic_tee_hal::{
-    ElasticTeeHal, PlatformCapabilities,
-    crypto::CryptoInterface as HalCrypto,
-    storage::StorageInterface as HalStorage,
     clock::ClockInterface as HalClock,
-    random::RandomInterface as HalRandom,
-    sockets::SocketInterface as HalSockets,
-    gpu::GpuInterface as HalGpu,
-    resources::ResourceInterface as HalResources,
-    events::EventInterface as HalEvents,
     communication::CommunicationInterface as HalComm,
-    communication::{BufferConfig, MessageType as HalMsgType, MessagePriority as HalMsgPriority},
-    events::{EventHandlerConfig, SubscriptionFilter, EventData},
+    communication::{BufferConfig, MessagePriority as HalMsgPriority, MessageType as HalMsgType},
+    crypto::CryptoInterface as HalCrypto,
+    events::EventInterface as HalEvents,
+    events::{EventData, EventHandlerConfig, SubscriptionFilter},
+    gpu::GpuInterface as HalGpu,
+    random::RandomInterface as HalRandom,
+    resources::ResourceInterface as HalResources,
+    sockets::SocketInterface as HalSockets,
+    storage::StorageInterface as HalStorage,
+    ElasticTeeHal, PlatformCapabilities,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -50,9 +50,8 @@ impl HalHost {
         let platform = ElasticTeeHal::new()?;
         let capabilities = futures::executor::block_on(platform.capabilities());
 
-        let storage = futures::executor::block_on(async {
-            HalStorage::new("/tmp/hal-storage").await.ok()
-        });
+        let storage =
+            futures::executor::block_on(async { HalStorage::new("/tmp/hal-storage").await.ok() });
 
         let resources = HalResources::new().ok();
 
@@ -81,8 +80,7 @@ impl HalHost {
     // ========================================================================
 
     pub fn attestation(&mut self, report_data: Vec<u8>) -> Result<Vec<u8>, String> {
-        futures::executor::block_on(self.platform.attest(&report_data))
-            .map_err(|e| e.to_string())
+        futures::executor::block_on(self.platform.attest(&report_data)).map_err(|e| e.to_string())
     }
 
     pub fn platform_info(&self) -> PlatformInfo {
@@ -99,17 +97,61 @@ impl HalHost {
 
     pub fn capabilities_list(&self) -> Vec<CapabilityInfo> {
         vec![
-            CapabilityInfo { feature_name: "clock".into(), supported: self.capabilities.features.clock, version: "1.0".into() },
-            CapabilityInfo { feature_name: "random".into(), supported: self.capabilities.features.random, version: "1.0".into() },
-            CapabilityInfo { feature_name: "storage".into(), supported: self.capabilities.features.storage, version: "1.0".into() },
-            CapabilityInfo { feature_name: "secure-storage".into(), supported: self.capabilities.features.secure_storage, version: "1.0".into() },
-            CapabilityInfo { feature_name: "tcp-sockets".into(), supported: self.capabilities.features.tcp_sockets, version: "1.0".into() },
-            CapabilityInfo { feature_name: "udp-sockets".into(), supported: self.capabilities.features.udp_sockets, version: "1.0".into() },
-            CapabilityInfo { feature_name: "tls".into(), supported: self.capabilities.features.tls_support, version: "1.0".into() },
-            CapabilityInfo { feature_name: "gpu-compute".into(), supported: self.capabilities.features.gpu_compute, version: "1.0".into() },
-            CapabilityInfo { feature_name: "attestation".into(), supported: self.capabilities.features.attestation, version: "1.0".into() },
-            CapabilityInfo { feature_name: "events".into(), supported: self.capabilities.features.event_handling, version: "1.0".into() },
-            CapabilityInfo { feature_name: "communication".into(), supported: self.capabilities.features.internal_communication, version: "1.0".into() },
+            CapabilityInfo {
+                feature_name: "clock".into(),
+                supported: self.capabilities.features.clock,
+                version: "1.0".into(),
+            },
+            CapabilityInfo {
+                feature_name: "random".into(),
+                supported: self.capabilities.features.random,
+                version: "1.0".into(),
+            },
+            CapabilityInfo {
+                feature_name: "storage".into(),
+                supported: self.capabilities.features.storage,
+                version: "1.0".into(),
+            },
+            CapabilityInfo {
+                feature_name: "secure-storage".into(),
+                supported: self.capabilities.features.secure_storage,
+                version: "1.0".into(),
+            },
+            CapabilityInfo {
+                feature_name: "tcp-sockets".into(),
+                supported: self.capabilities.features.tcp_sockets,
+                version: "1.0".into(),
+            },
+            CapabilityInfo {
+                feature_name: "udp-sockets".into(),
+                supported: self.capabilities.features.udp_sockets,
+                version: "1.0".into(),
+            },
+            CapabilityInfo {
+                feature_name: "tls".into(),
+                supported: self.capabilities.features.tls_support,
+                version: "1.0".into(),
+            },
+            CapabilityInfo {
+                feature_name: "gpu-compute".into(),
+                supported: self.capabilities.features.gpu_compute,
+                version: "1.0".into(),
+            },
+            CapabilityInfo {
+                feature_name: "attestation".into(),
+                supported: self.capabilities.features.attestation,
+                version: "1.0".into(),
+            },
+            CapabilityInfo {
+                feature_name: "events".into(),
+                supported: self.capabilities.features.event_handling,
+                version: "1.0".into(),
+            },
+            CapabilityInfo {
+                feature_name: "communication".into(),
+                supported: self.capabilities.features.internal_communication,
+                version: "1.0".into(),
+            },
         ]
     }
 
@@ -128,12 +170,14 @@ impl HalHost {
             HashAlgorithm::Sha512 => "SHA-512",
             HashAlgorithm::Blake3 => "SHA-384", // map to available impl
         };
-        futures::executor::block_on(self.crypto.hash_data(algo, data))
-            .map_err(|e| e.to_string())
+        futures::executor::block_on(self.crypto.hash_data(algo, data)).map_err(|e| e.to_string())
     }
 
     pub fn crypto_encrypt(
-        &self, data: &[u8], key: &[u8], algorithm: CipherAlgorithm,
+        &self,
+        data: &[u8],
+        key: &[u8],
+        algorithm: CipherAlgorithm,
     ) -> Result<Vec<u8>, String> {
         let algo = match algorithm {
             CipherAlgorithm::Aes256Gcm => "AES-256-GCM",
@@ -144,7 +188,10 @@ impl HalHost {
     }
 
     pub fn crypto_decrypt(
-        &self, data: &[u8], key: &[u8], algorithm: CipherAlgorithm,
+        &self,
+        data: &[u8],
+        key: &[u8],
+        algorithm: CipherAlgorithm,
     ) -> Result<Vec<u8>, String> {
         let algo = match algorithm {
             CipherAlgorithm::Aes256Gcm => "AES-256-GCM",
@@ -156,11 +203,14 @@ impl HalHost {
 
     pub fn crypto_generate_keypair(&self) -> Result<KeyPair, String> {
         // Generate a 32-byte seed for Ed25519
-        let seed = self.random.generate_key_material(32).map_err(|e| e.to_string())?;
+        let seed = self
+            .random
+            .generate_key_material(32)
+            .map_err(|e| e.to_string())?;
         // Load a signing context to extract the public key
-        let ctx = futures::executor::block_on(
-            self.crypto.load_key_context("Ed25519", &seed, "signing"),
-        ).map_err(|e| e.to_string())?;
+        let ctx =
+            futures::executor::block_on(self.crypto.load_key_context("Ed25519", &seed, "signing"))
+                .map_err(|e| e.to_string())?;
         // Sign empty data to confirm context works; public key is derived from seed
         // For Ed25519, public key is the last 32 bytes of the 64-byte expanded key
         // We return the seed as private_key so the caller can reconstruct
@@ -173,20 +223,28 @@ impl HalHost {
     }
 
     pub fn crypto_sign(&self, data: &[u8], private_key: &[u8]) -> Result<Vec<u8>, String> {
-        let ctx = futures::executor::block_on(
-            self.crypto.load_key_context("Ed25519", private_key, "signing"),
-        ).map_err(|e| e.to_string())?;
+        let ctx = futures::executor::block_on(self.crypto.load_key_context(
+            "Ed25519",
+            private_key,
+            "signing",
+        ))
+        .map_err(|e| e.to_string())?;
         let sig = futures::executor::block_on(self.crypto.sign_data(ctx, data))
             .map_err(|e| e.to_string())?;
         Ok(sig.signature)
     }
 
     pub fn crypto_verify(
-        &self, data: &[u8], signature: &[u8], public_key: &[u8],
+        &self,
+        data: &[u8],
+        signature: &[u8],
+        public_key: &[u8],
     ) -> Result<bool, String> {
         futures::executor::block_on(
-            self.crypto.verify_signature("Ed25519", public_key, data, signature),
-        ).map_err(|e| e.to_string())
+            self.crypto
+                .verify_signature("Ed25519", public_key, data, signature),
+        )
+        .map_err(|e| e.to_string())
     }
 
     pub fn crypto_create_context(&self) -> Result<u64, String> {
@@ -204,7 +262,9 @@ impl HalHost {
     // ========================================================================
 
     fn storage(&self) -> Result<&HalStorage, String> {
-        self.storage.as_ref().ok_or_else(|| "Storage not initialized".to_string())
+        self.storage
+            .as_ref()
+            .ok_or_else(|| "Storage not initialized".to_string())
     }
 
     pub fn storage_create_container(&self, name: &str) -> Result<u64, String> {
@@ -223,16 +283,17 @@ impl HalHost {
     }
 
     pub fn storage_store_object(
-        &self, container: u64, key: &str, data: &[u8],
+        &self,
+        container: u64,
+        key: &str,
+        data: &[u8],
     ) -> Result<u64, String> {
         futures::executor::block_on(self.storage()?.write_object(container, key, data))
             .map_err(|e| e.to_string())?;
         Ok(self.next_id()) // return object handle
     }
 
-    pub fn storage_retrieve_object(
-        &self, container: u64, key: &str,
-    ) -> Result<Vec<u8>, String> {
+    pub fn storage_retrieve_object(&self, container: u64, key: &str) -> Result<Vec<u8>, String> {
         futures::executor::block_on(self.storage()?.read_object(container, key))
             .map_err(|e| e.to_string())
     }
@@ -248,7 +309,9 @@ impl HalHost {
     }
 
     pub fn storage_get_metadata(
-        &self, container: u64, key: &str,
+        &self,
+        container: u64,
+        key: &str,
     ) -> Result<ObjectMetadata, String> {
         // Read object to get size; metadata file is internal detail
         let data = self.storage_retrieve_object(container, key)?;
@@ -280,7 +343,9 @@ impl HalHost {
         let bind_addr = format!("{}:{}", addr.ip, addr.port);
         // For TCP, create listener; for UDP, bind socket
         futures::executor::block_on(async {
-            self.sockets.create_tcp_socket(&bind_addr).await
+            self.sockets
+                .create_tcp_socket(&bind_addr)
+                .await
                 .map_err(|e| e.to_string())?;
             Ok::<(), String>(())
         })
@@ -298,8 +363,7 @@ impl HalHost {
     }
 
     pub fn sockets_accept(&self, listener: u64) -> Result<u64, String> {
-        futures::executor::block_on(self.sockets.tcp_accept(listener))
-            .map_err(|e| e.to_string())
+        futures::executor::block_on(self.sockets.tcp_accept(listener)).map_err(|e| e.to_string())
     }
 
     pub fn sockets_send(&self, socket: u64, data: &[u8]) -> Result<u32, String> {
@@ -317,8 +381,7 @@ impl HalHost {
     }
 
     pub fn sockets_close(&self, socket: u64) -> Result<(), String> {
-        futures::executor::block_on(self.sockets.close_socket(socket))
-            .map_err(|e| e.to_string())
+        futures::executor::block_on(self.sockets.close_socket(socket)).map_err(|e| e.to_string())
     }
 
     // ========================================================================
@@ -328,8 +391,7 @@ impl HalHost {
     // ========================================================================
 
     pub fn gpu_list_adapters(&self) -> Result<Vec<u64>, String> {
-        futures::executor::block_on(self.gpu.get_gpu_adapters())
-            .map_err(|e| e.to_string())
+        futures::executor::block_on(self.gpu.get_gpu_adapters()).map_err(|e| e.to_string())
     }
 
     pub fn gpu_get_adapter_info(&self, handle: u64) -> Result<AdapterInfo, String> {
@@ -343,21 +405,25 @@ impl HalHost {
     }
 
     pub fn gpu_create_device(&self, adapter: u64) -> Result<u64, String> {
-        futures::executor::block_on(self.gpu.create_gpu_device(adapter))
-            .map_err(|e| e.to_string())
+        futures::executor::block_on(self.gpu.create_gpu_device(adapter)).map_err(|e| e.to_string())
     }
 
     pub fn gpu_create_buffer(
-        &self, device: u64, descriptor: &BufferDescriptor,
+        &self,
+        device: u64,
+        descriptor: &BufferDescriptor,
     ) -> Result<u64, String> {
         let usage = elastic_tee_hal::gpu::GpuBufferUsage {
             storage: matches!(descriptor.usage, BufferUsage::Storage),
             uniform: matches!(descriptor.usage, BufferUsage::Uniform),
             vertex: matches!(descriptor.usage, BufferUsage::Vertex),
             index: matches!(descriptor.usage, BufferUsage::Index),
-            map_read: false, map_write: false,
-            copy_src: true, copy_dst: true,
-            indirect: false, query_resolve: false,
+            map_read: false,
+            map_write: false,
+            copy_src: true,
+            copy_dst: true,
+            indirect: false,
+            query_resolve: false,
         };
         let desc = elastic_tee_hal::gpu::GpuBufferDescriptor {
             label: None,
@@ -369,34 +435,33 @@ impl HalHost {
             .map_err(|e| e.to_string())
     }
 
-    pub fn gpu_write_buffer(
-        &self, buffer: u64, offset: u64, data: &[u8],
-    ) -> Result<(), String> {
+    pub fn gpu_write_buffer(&self, buffer: u64, offset: u64, data: &[u8]) -> Result<(), String> {
         futures::executor::block_on(self.gpu.write_gpu_buffer(buffer, offset, data))
             .map_err(|e| e.to_string())
     }
 
-    pub fn gpu_read_buffer(
-        &self, buffer: u64, offset: u64, size: u64,
-    ) -> Result<Vec<u8>, String> {
+    pub fn gpu_read_buffer(&self, buffer: u64, offset: u64, size: u64) -> Result<Vec<u8>, String> {
         futures::executor::block_on(self.gpu.read_gpu_buffer(buffer, offset, size))
             .map_err(|e| e.to_string())
     }
 
     pub fn gpu_create_compute_pipeline(
-        &self, device: u64, shader_code: &[u8],
+        &self,
+        device: u64,
+        shader_code: &[u8],
     ) -> Result<u64, String> {
-        futures::executor::block_on(
-            self.gpu.create_gpu_compute_pipeline(device, shader_code, "main", [64, 1, 1]),
-        ).map_err(|e| e.to_string())
+        futures::executor::block_on(self.gpu.create_gpu_compute_pipeline(
+            device,
+            shader_code,
+            "main",
+            [64, 1, 1],
+        ))
+        .map_err(|e| e.to_string())
     }
 
-    pub fn gpu_dispatch(
-        &self, pipeline: u64, x: u32, y: u32, z: u32,
-    ) -> Result<(), String> {
-        futures::executor::block_on(
-            self.gpu.dispatch_compute(pipeline, x, y, z),
-        ).map_err(|e| e.to_string())
+    pub fn gpu_dispatch(&self, pipeline: u64, x: u32, y: u32, z: u32) -> Result<(), String> {
+        futures::executor::block_on(self.gpu.dispatch_compute(pipeline, x, y, z))
+            .map_err(|e| e.to_string())
     }
 
     // ========================================================================
@@ -404,11 +469,14 @@ impl HalHost {
     // ========================================================================
 
     fn resources(&self) -> Result<&HalResources, String> {
-        self.resources.as_ref().ok_or_else(|| "Resources not initialized".to_string())
+        self.resources
+            .as_ref()
+            .ok_or_else(|| "Resources not initialized".to_string())
     }
 
     pub fn resources_allocate(
-        &self, request: &AllocationRequest,
+        &self,
+        request: &AllocationRequest,
     ) -> Result<AllocationResponse, String> {
         let res_type = match request.resource_type {
             ResourceType::Memory => elastic_tee_hal::resources::ResourceType::Memory,
@@ -428,9 +496,8 @@ impl HalHost {
             },
             timeout_seconds: None,
         };
-        let result = futures::executor::block_on(
-            self.resources()?.allocate_resource(hal_request),
-        ).map_err(|e| e.to_string())?;
+        let result = futures::executor::block_on(self.resources()?.allocate_resource(hal_request))
+            .map_err(|e| e.to_string())?;
         Ok(AllocationResponse {
             allocation_id: result.allocation_id,
             granted_amount: result.granted_amount,
@@ -449,9 +516,13 @@ impl HalHost {
             .map_err(|e| e.to_string())?;
         Ok(match resource_type {
             ResourceType::Memory => limits.max_memory_mb.saturating_sub(usage.memory_mb),
-            ResourceType::Cpu => (limits.max_cpu_cores as u64).saturating_sub(usage.cpu_cores as u64),
+            ResourceType::Cpu => {
+                (limits.max_cpu_cores as u64).saturating_sub(usage.cpu_cores as u64)
+            }
             ResourceType::Storage => limits.max_storage_mb.saturating_sub(usage.storage_mb),
-            ResourceType::Network => limits.max_network_bandwidth_mbps.saturating_sub(usage.network_bandwidth_mbps),
+            ResourceType::Network => limits
+                .max_network_bandwidth_mbps
+                .saturating_sub(usage.network_bandwidth_mbps),
         })
     }
 
@@ -491,9 +562,7 @@ impl HalHost {
 
     pub fn events_poll(&self, handle: u64) -> Result<Vec<EventDataWit>, String> {
         // Try to receive events without blocking
-        match futures::executor::block_on(
-            self.events.request_event_from_handler(handle, Some(0)),
-        ) {
+        match futures::executor::block_on(self.events.request_event_from_handler(handle, Some(0))) {
             Ok(event) => Ok(vec![EventDataWit {
                 event_type: match event.event_type.as_str() {
                     "platform" => EventType::Platform,
@@ -521,46 +590,59 @@ impl HalHost {
     // ========================================================================
 
     pub fn communication_send_message(
-        &self, recipient: &str, data: &[u8], encrypt: bool,
+        &self,
+        recipient: &str,
+        data: &[u8],
+        encrypt: bool,
     ) -> Result<u64, String> {
         // Ensure a buffer exists for this channel
         let buffer_name = format!("channel_{}", recipient);
-        let buffer = futures::executor::block_on(
-            self.communication.setup_communication_buffer(BufferConfig {
+        let buffer = futures::executor::block_on(self.communication.setup_communication_buffer(
+            BufferConfig {
                 name: buffer_name,
                 capacity: 65536,
                 is_encrypted: encrypt,
                 read_permissions: vec![recipient.to_string()],
                 write_permissions: vec!["wasm-guest".to_string()],
                 admin_permissions: vec!["admin".to_string()],
-            }),
-        );
+            },
+        ));
         let buffer_handle = match buffer {
             Ok(h) => h,
             Err(_) => {
                 // Buffer may already exist; try to find it
-                let buffers = futures::executor::block_on(
-                    self.communication.list_communication_buffers(),
-                ).map_err(|e| e.to_string())?;
-                buffers.first().ok_or("No communication buffer available")?.handle
+                let buffers =
+                    futures::executor::block_on(self.communication.list_communication_buffers())
+                        .map_err(|e| e.to_string())?;
+                buffers
+                    .first()
+                    .ok_or("No communication buffer available")?
+                    .handle
             }
         };
         futures::executor::block_on(self.communication.push_data_to_buffer(
-            buffer_handle, data, "wasm-guest",
+            buffer_handle,
+            data,
+            "wasm-guest",
             HalMsgType::Data,
-            if encrypt { HalMsgPriority::High } else { HalMsgPriority::Normal },
-        )).map_err(|e| e.to_string())?;
+            if encrypt {
+                HalMsgPriority::High
+            } else {
+                HalMsgPriority::Normal
+            },
+        ))
+        .map_err(|e| e.to_string())?;
         Ok(self.next_id())
     }
 
     pub fn communication_receive_message(&self) -> Result<Option<Message>, String> {
-        let buffers = futures::executor::block_on(
-            self.communication.list_communication_buffers(),
-        ).map_err(|e| e.to_string())?;
+        let buffers = futures::executor::block_on(self.communication.list_communication_buffers())
+            .map_err(|e| e.to_string())?;
 
         for buffer_info in buffers {
             if let Ok(Some(msg)) = futures::executor::block_on(
-                self.communication.read_data_from_buffer(buffer_info.handle, "wasm-guest"),
+                self.communication
+                    .read_data_from_buffer(buffer_info.handle, "wasm-guest"),
             ) {
                 return Ok(Some(Message {
                     sender: msg.sender,
@@ -575,10 +657,12 @@ impl HalHost {
 
     pub fn communication_list_workloads(&self) -> Result<Vec<String>, String> {
         // Return known workload identifiers from active buffers
-        let buffers = futures::executor::block_on(
-            self.communication.list_communication_buffers(),
-        ).map_err(|e| e.to_string())?;
-        Ok(buffers.iter().map(|b| format!("workload-{}", b.name)).collect())
+        let buffers = futures::executor::block_on(self.communication.list_communication_buffers())
+            .map_err(|e| e.to_string())?;
+        Ok(buffers
+            .iter()
+            .map(|b| format!("workload-{}", b.name))
+            .collect())
     }
 
     // ========================================================================
@@ -594,7 +678,10 @@ impl HalHost {
     }
 
     pub fn clock_monotonic_time(&self) -> Result<WitMonotonicTime, String> {
-        let time = self.clock.read_monotonic_time().map_err(|e| e.to_string())?;
+        let time = self
+            .clock
+            .read_monotonic_time()
+            .map_err(|e| e.to_string())?;
         Ok(WitMonotonicTime {
             elapsed_seconds: time.elapsed_seconds,
             elapsed_nanoseconds: time.elapsed_nanoseconds,
@@ -607,8 +694,7 @@ impl HalHost {
 
     pub fn clock_sleep(&self, duration_ns: u64) -> Result<(), String> {
         let duration = std::time::Duration::from_nanos(duration_ns);
-        futures::executor::block_on(self.clock.sleep(duration))
-            .map_err(|e| e.to_string())
+        futures::executor::block_on(self.clock.sleep(duration)).map_err(|e| e.to_string())
     }
 
     // ========================================================================
@@ -617,20 +703,26 @@ impl HalHost {
     // ========================================================================
 
     pub fn random_get_bytes(&self, length: u32) -> Result<Vec<u8>, String> {
-        self.random.generate_random_bytes(length as usize)
+        self.random
+            .generate_random_bytes(length as usize)
             .map_err(|e| e.to_string())
     }
 
     pub fn random_get_secure(&self, length: u32) -> Result<Vec<u8>, String> {
         // Same implementation — all our random is cryptographically secure
-        self.random.generate_random_bytes(length as usize)
+        self.random
+            .generate_random_bytes(length as usize)
             .map_err(|e| e.to_string())
     }
 
     pub fn random_get_entropy_info(&self) -> Result<EntropyInfo, String> {
         let is_hw = elastic_tee_hal::random::hardware_rng::is_hardware_rng_available();
         Ok(EntropyInfo {
-            source: if is_hw { EntropySource::Hardware } else { EntropySource::Platform },
+            source: if is_hw {
+                EntropySource::Hardware
+            } else {
+                EntropySource::Platform
+            },
             quality: if is_hw { 100 } else { 80 },
             available_bytes: 1_048_576, // 1 MB available
         })
@@ -664,10 +756,17 @@ pub struct CapabilityInfo {
 
 // -- crypto --
 #[derive(Clone, Debug)]
-pub enum HashAlgorithm { Sha256, Sha512, Blake3 }
+pub enum HashAlgorithm {
+    Sha256,
+    Sha512,
+    Blake3,
+}
 
 #[derive(Clone, Debug)]
-pub enum CipherAlgorithm { Aes256Gcm, ChaCha20Poly1305 }
+pub enum CipherAlgorithm {
+    Aes256Gcm,
+    ChaCha20Poly1305,
+}
 
 #[derive(Clone, Debug)]
 pub struct KeyPair {
@@ -685,7 +784,12 @@ pub struct ObjectMetadata {
 
 // -- sockets --
 #[derive(Clone, Debug)]
-pub enum Protocol { Tcp, Udp, Tls, Dtls }
+pub enum Protocol {
+    Tcp,
+    Udp,
+    Tls,
+    Dtls,
+}
 
 #[derive(Clone, Debug)]
 pub struct Address {
@@ -695,7 +799,12 @@ pub struct Address {
 
 // -- gpu --
 #[derive(Clone, Debug)]
-pub enum BufferUsage { Storage, Uniform, Vertex, Index }
+pub enum BufferUsage {
+    Storage,
+    Uniform,
+    Vertex,
+    Index,
+}
 
 #[derive(Clone, Debug)]
 pub struct AdapterInfo {
@@ -712,7 +821,12 @@ pub struct BufferDescriptor {
 
 // -- resources --
 #[derive(Clone, Debug)]
-pub enum ResourceType { Memory, Cpu, Storage, Network }
+pub enum ResourceType {
+    Memory,
+    Cpu,
+    Storage,
+    Network,
+}
 
 #[derive(Clone, Debug)]
 pub struct AllocationRequest {
@@ -729,7 +843,13 @@ pub struct AllocationResponse {
 
 // -- events --
 #[derive(Clone, Debug)]
-pub enum EventType { Platform, Crypto, Storage, Network, Gpu }
+pub enum EventType {
+    Platform,
+    Crypto,
+    Storage,
+    Network,
+    Gpu,
+}
 
 #[derive(Clone, Debug)]
 pub struct EventDataWit {
@@ -762,7 +882,11 @@ pub struct WitMonotonicTime {
 
 // -- random --
 #[derive(Clone, Debug)]
-pub enum EntropySource { Hardware, Platform, Userspace }
+pub enum EntropySource {
+    Hardware,
+    Platform,
+    Userspace,
+}
 
 #[derive(Clone, Debug)]
 pub struct EntropyInfo {

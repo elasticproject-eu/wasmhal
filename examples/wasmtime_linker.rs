@@ -6,6 +6,10 @@ use wasmtime::component::*;
 use wasmtime::{Config, Engine, Store};
 
 fn main() -> anyhow::Result<()> {
+    env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Info)
+        .init();
+
     // Initialize Wasmtime with component model support
     let mut config = Config::new();
     config.wasm_component_model(true);
@@ -14,47 +18,47 @@ fn main() -> anyhow::Result<()> {
     // Create a linker
     let mut linker = Linker::new(&engine);
 
-    println!("Adding ELASTIC TEE HAL interfaces to Wasmtime linker...\n");
+    log::info!("Adding ELASTIC TEE HAL interfaces to Wasmtime linker...\n");
 
     // Option 1: Add all interfaces (full HAL)
-    println!("Option 1: Full HAL");
+    log::info!("Option 1: Full HAL");
     wasmtime_bindings::add_to_linker(&mut linker)?;
-    println!("✓ All 11 interfaces added\n");
+    log::info!("✓ All 11 interfaces added\n");
 
     // Option 2: Add minimal interfaces only
-    println!("Option 2: Minimal HAL (platform, capabilities, crypto, random)");
+    log::info!("Option 2: Minimal HAL (platform, capabilities, crypto, random)");
     let mut linker2 = Linker::new(&engine);
     wasmtime_bindings::add_minimal_to_linker(&mut linker2)?;
-    println!("✓ 4 core interfaces added\n");
+    log::info!("✓ 4 core interfaces added\n");
 
     // Option 3: Add attestation-focused interfaces
-    println!("Option 3: Attestation HAL (platform, crypto, random)");
+    log::info!("Option 3: Attestation HAL (platform, crypto, random)");
     let mut linker3 = Linker::new(&engine);
     wasmtime_bindings::add_attestation_to_linker(&mut linker3)?;
-    println!("✓ 3 attestation interfaces added\n");
+    log::info!("✓ 3 attestation interfaces added\n");
 
     // Option 4: Add individual interfaces as needed
-    println!("Option 4: Custom composition (platform + crypto)");
+    log::info!("Option 4: Custom composition (platform + crypto)");
     let mut linker4 = Linker::new(&engine);
     wasmtime_bindings::platform::add_to_linker(&mut linker4)?;
     wasmtime_bindings::crypto::add_to_linker(&mut linker4)?;
-    println!("✓ 2 custom interfaces added\n");
+    log::info!("✓ 2 custom interfaces added\n");
 
     // Option 5: Storage-focused
-    println!("Option 5: Storage HAL");
+    log::info!("Option 5: Storage HAL");
     let mut linker5 = Linker::new(&engine);
     wasmtime_bindings::add_storage_to_linker(&mut linker5)?;
-    println!("✓ Storage interfaces added\n");
+    log::info!("✓ Storage interfaces added\n");
 
     // Option 6: Network-focused
-    println!("Option 6: Network HAL");
+    log::info!("Option 6: Network HAL");
     let mut linker6 = Linker::new(&engine);
     wasmtime_bindings::add_network_to_linker(&mut linker6)?;
-    println!("✓ Network interfaces added\n");
+    log::info!("✓ Network interfaces added\n");
 
-    println!("All linker configurations successful!");
-    println!("\nThe linkers are now ready to instantiate WASM components");
-    println!("that use the corresponding ELASTIC TEE HAL interfaces.");
+    log::info!("All linker configurations successful!");
+    log::info!("\nThe linkers are now ready to instantiate WASM components");
+    log::info!("that use the corresponding ELASTIC TEE HAL interfaces.");
 
     Ok(())
 }

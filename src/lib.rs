@@ -71,24 +71,33 @@ pub struct Random;
 mod tests {
     use super::*;
 
+    fn init() {
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| {
+            let _ = env_logger::builder().is_test(true).try_init();
+        });
+    }
+
     #[test]
     fn test_hal_creation() {
+        init();
         // Test with a specific platform since auto-detection requires actual hardware
         let hal = ElasticTeeHal::with_platform(platform::PlatformType::AmdSev);
         match &hal {
             Ok(_) => {}
-            Err(e) => println!("HAL creation failed: {:?}", e),
+            Err(e) => log::error!("HAL creation failed: {:?}", e),
         }
         assert!(hal.is_ok());
     }
 
     #[test]
     fn test_platform_detection() {
+        init();
         // Test auto-detection to see what's available
         let hal = ElasticTeeHal::new();
         match &hal {
-            Ok(_) => println!("Platform auto-detection succeeded!"),
-            Err(e) => println!("Platform auto-detection failed: {:?}", e),
+            Ok(_) => log::info!("Platform auto-detection succeeded!"),
+            Err(e) => log::error!("Platform auto-detection failed: {:?}", e),
         }
         // Don't assert since this might fail on non-TEE hardware
     }

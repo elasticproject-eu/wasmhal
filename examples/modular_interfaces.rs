@@ -5,88 +5,90 @@ use elastic_tee_hal::interfaces::*;
 use elastic_tee_hal::providers::*;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== ELASTIC TEE HAL - Modular Interface Demo ===\n");
+    env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Info)
+        .init();
+
+    log::info!("=== ELASTIC TEE HAL - Modular Interface Demo ===\n");
 
     // Option 1: Use default implementations
-    println!("1. Using default provider:");
+    log::info!("1. Using default provider:");
     let provider = HalProvider::with_defaults();
 
     if let Some(platform) = &provider.platform {
         let (platform_type, version, attestation_support) = platform.platform_info()?;
-        println!("  Platform: {}", platform_type);
-        println!("  Version: {}", version);
-        println!("  Attestation: {}", attestation_support);
+        log::debug!("  Platform: {}", platform_type);
+        log::debug!("  Version: {}", version);
+        log::debug!("  Attestation: {}", attestation_support);
     }
-    println!();
+    log::info!("");
 
     // Option 2: Use individual interfaces
-    println!("2. Using individual interfaces:");
+    log::info!("2. Using individual interfaces:");
 
     // Random interface
-    let random = DefaultRandomProvider::new();
+    let random = DefaultRandomProvider::default();
     let random_bytes = random.get_random_bytes(32)?;
-    println!("  Generated {} random bytes", random_bytes.len());
+    log::debug!("  Generated {} random bytes", random_bytes.len());
 
     // Crypto interface
-    let crypto = DefaultCryptoProvider::new();
+    let crypto = DefaultCryptoProvider::default();
     let test_data = b"Hello, TEE!";
     let hash = crypto.hash(test_data, "SHA-256")?;
-    println!("  SHA-256 hash: {} bytes", hash.len());
+    log::debug!("  SHA-256 hash: {} bytes", hash.len());
 
     // Capabilities interface
-    let caps = DefaultCapabilitiesProvider::new();
+    let caps = DefaultCapabilitiesProvider::default();
     let has_rdrand = caps.has_capability("rdrand")?;
-    println!("  RDRAND available: {}", has_rdrand);
+    log::debug!("  RDRAND available: {}", has_rdrand);
 
     // Clock interface
-    let clock = DefaultClockProvider::new();
+    let clock = DefaultClockProvider::default();
     let (seconds, nanos) = clock.system_time()?;
-    println!("  System time: {}.{:09} seconds", seconds, nanos);
-    println!();
+    log::debug!("  System time: {}.{:09} seconds", seconds, nanos);
 
     // Option 3: Custom composition
-    println!("3. Custom composition:");
+    log::info!("3. Custom composition:");
     let mut custom_provider = HalProvider::new();
     if let Ok(platform) = DefaultPlatformProvider::new() {
         custom_provider.platform = Some(Box::new(platform));
     }
-    custom_provider.crypto = Some(Box::new(DefaultCryptoProvider::new()));
-    custom_provider.random = Some(Box::new(DefaultRandomProvider::new()));
+    custom_provider.crypto = Some(Box::new(DefaultCryptoProvider::default()));
+    custom_provider.random = Some(Box::new(DefaultRandomProvider::default()));
 
-    println!("  ✓ Custom provider with interfaces");
-    println!();
+    log::info!("  ✓ Custom provider with interfaces");
+    log::info!("");
 
     // Option 4: Test attestation
-    println!("4. Platform attestation:");
+    log::info!("4. Platform attestation:");
     if let Some(platform) = &provider.platform {
         let nonce = b"test_nonce_for_attestation_demo_";
         match platform.attestation(nonce) {
             Ok(attestation) => {
-                println!("  ✓ Attestation generated: {} bytes", attestation.len());
+                log::info!("  ✓ Attestation generated: {} bytes", attestation.len());
             }
             Err(e) => {
-                println!("  ⚠ Attestation error: {}", e);
+                log::warn!("  ⚠ Attestation error: {}", e);
             }
         }
     }
-    println!();
 
     // Option 5: Crypto operations
-    println!("5. Cryptographic operations:");
+    log::info!("5. Cryptographic operations:");
     let keypair = crypto.generate_keypair()?;
-    println!("  ✓ Keypair generated:");
-    println!("    Public key: {} bytes", keypair.0.len());
-    println!("    Private key: {} bytes", keypair.1.len());
+    log::info!("  ✓ Keypair generated:");
+    log::debug!("    Public key: {} bytes", keypair.0.len());
+    log::debug!("    Private key: {} bytes", keypair.1.len());
 
     let message = b"Sign this message";
     let signature = crypto.sign(message, &keypair.1)?;
-    println!("  ✓ Signature: {} bytes", signature.len());
+    log::info!("  ✓ Signature: {} bytes", signature.len());
 
     let valid = crypto.verify(message, &signature, &keypair.0)?;
-    println!("  ✓ Signature valid: {}", valid);
-    println!();
+    log::info!("  ✓ Signature valid: {}", valid);
+    log::info!("");
 
-    println!("=== All operations completed successfully ===");
+    log::info!("=== All operations completed successfully ===");
 
     Ok(())
 }

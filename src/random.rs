@@ -205,9 +205,9 @@ pub mod hardware_rng {
                 let is_tdx = content.contains("tdx_guest");
 
                 if is_tdx {
-                    println!("Intel TDX Hardware RNG:");
-                    println!("  - RDRAND available: {}", has_rdrand);
-                    println!("  - RDSEED available: {}", has_rdseed);
+                    log::debug!("Intel TDX Hardware RNG:");
+                    log::debug!("  - RDRAND available: {}", has_rdrand);
+                    log::debug!("  - RDSEED available: {}", has_rdseed);
                 }
 
                 has_rdrand || has_rdseed
@@ -239,6 +239,13 @@ pub mod hardware_rng {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn init() {
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| {
+            let _ = env_logger::builder().is_test(true).try_init();
+        });
+    }
 
     #[test]
     fn test_random_bytes_generation() {
@@ -369,11 +376,12 @@ mod tests {
 
     #[test]
     fn test_hardware_rng_availability() {
+        init();
         use hardware_rng::*;
 
         // Test availability check
         let available = is_hardware_rng_available();
-        println!("Hardware RNG available: {}", available);
+        log::info!("Hardware RNG available: {}", available);
 
         // Test hardware random generation (may fall back to software)
         if available {
