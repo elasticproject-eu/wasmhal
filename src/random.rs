@@ -281,7 +281,7 @@ mod tests {
 
         for _ in 0..100 {
             let val = rng.generate_random_range(10, 20).unwrap();
-            assert!(val >= 10 && val < 20);
+            assert!((10..20).contains(&val));
         }
 
         // Test error case

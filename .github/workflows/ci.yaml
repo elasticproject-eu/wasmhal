@@ -23,14 +23,21 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v6
 
-      - name: Check cargo
-        run: cargo check --release
+      # The amd-sev feature pulls az-snp-vtpm -> tss-esapi-sys, whose build
+      # script needs the TPM2 TSS headers (tss2-sys.pc) on the runner.
+      - name: Install TPM2 TSS development headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtss2-dev libssl-dev pkg-config
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
       - name: Run linter
         run: cargo clippy -- -D warnings
+
+      - name: Check cargo
+        run: cargo check --release
 
       - name: Build release
         run: cargo build --release

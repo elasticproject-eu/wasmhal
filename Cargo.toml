@@ -64,9 +64,17 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # Base64 encoding for ITA quote submission
 base64 = "0.22"
 
+# Azure SEV-SNP attestation via the guest vTPM (HCL report + TPM quote).
+# Used by the `amd-sev` feature on Azure CVMs, where the paravisor exposes a
+# vTPM instead of /dev/sev-guest.
+az-cvm-vtpm = { version = "0.8", optional = true }
+az-snp-vtpm = { version = "0.8", default-features = false, features = ["attester"], optional = true }
+
 [features]
 default = ["amd-sev"]
-amd-sev = []
+# `amd-sev` covers both bare-metal /dev/sev-guest guests and Azure SEV-SNP CVMs
+# whose evidence comes from the vTPM.
+amd-sev = ["dep:az-cvm-vtpm", "dep:az-snp-vtpm"]
 gpu = ["wgpu"]
 component = ["wasmtime", "cargo-component"]
 wasmtime = ["dep:wasmtime"]

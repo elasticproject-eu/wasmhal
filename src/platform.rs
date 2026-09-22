@@ -128,15 +128,41 @@ impl ElasticTeeHal {
             // Check for TSM support (Trust Security Module for attestation)
             let has_tsm = std::path::Path::new("/sys/kernel/config/tsm/report").exists();
 
+            // Azure confidential VMs run behind a paravisor: none of the SEV
+            // device nodes or the TSM configfs exist, but the guest does have a
+            // vTPM carrying an HCL report. Treat that as SEV-SNP too.
+            let has_vtpm = std::path::Path::new("/dev/tpm0").exists()
+                || std::path::Path::new("/dev/tpmrm0").exists();
+            let azure_vtpm = has_vtpm && Self::is_azure_snp_vtpm();
+
             log::debug!("AMD SEV Detection:");
             log::debug!("  - AMD CPU: {}", is_amd);
             log::debug!("  - /dev/sev-guest: {}", has_sev_guest);
             log::debug!("  - /dev/sev: {}", has_sev_dev);
             log::debug!("  - TSM support: {}", has_tsm);
+            log::debug!("  - Azure vTPM (SNP): {}", azure_vtpm);
 
-            is_amd && (has_sev_guest || has_sev_dev) && has_tsm
+            azure_vtpm || (is_amd && (has_sev_guest || has_sev_dev) && has_tsm)
         }
         #[cfg(not(target_arch = "x86_64"))]
+        false
+    }
+
+    /// Whether this guest is an Azure SEV-SNP CVM, determined by asking the
+    /// vTPM for its HCL report. Returns false on any error or non-SNP guest.
+    #[cfg(all(feature = "amd-sev", target_arch = "x86_64"))]
+    fn is_azure_snp_vtpm() -> bool {
+        match az_snp_vtpm::is_snp_cvm() {
+            Ok(is_snp) => is_snp,
+            Err(e) => {
+                log::debug!("Failed to read HCL report from vTPM: {}", e);
+                false
+            }
+        }
+    }
+
+    #[cfg(not(all(feature = "amd-sev", target_arch = "x86_64")))]
+    fn is_azure_snp_vtpm() -> bool {
         false
     }
 
@@ -285,44 +311,42 @@ impl ElasticTeeHal {
         }
     }
 
-    /// AMD SEV attestation
+    /// AMD SEV-SNP attestation.
+    ///
+    /// Two evidence sources are supported:
+    ///
+    /// 1. **Azure Confidential VM** — the paravisor exposes a vTPM instead of
+    ///    `/dev/sev-guest`. Evidence is the vTPM's HCL report plus a TPM quote
+    ///    over the requested report data, returned as the same JSON shape the
+    ///    `az-snp-vtpm` attester produces (the format Trustee's
+    ///    `az_snp_vtpm` verifier consumes).
+    /// 2. **Bare metal / non-Azure** — no provider is wired yet; returns a
+    ///    clear error rather than synthetic data, so a caller can tell an
+    ///    unimplemented path from a failed one.
     async fn amd_sev_attest(&self, report_data: &[u8]) -> HalResult<Vec<u8>> {
-        // In a real implementation, this would:
-        // - Generate attestation report
-        // - Include measurement data
-        // - Sign with platform key
-        // - Include the provided report_data in the attestation report
-
         log::info!(
-            "Generating AMD SEV attestation report with {} bytes of report data",
+            "Generating AMD SEV attestation with {} bytes of report data",
             report_data.len()
         );
 
-        // Pad report_data to 64 bytes for SEV-SNP
         if report_data.len() > 64 {
-            return Err(HalError::InvalidParameter("Userdata too long".into()));
+            return Err(HalError::InvalidParameter(
+                "report_data must be at most 64 bytes".into(),
+            ));
         }
-        let mut report_data_padded = vec![0u8; 64];
-        let copy_len = report_data.len().min(64);
-        report_data_padded[..copy_len].copy_from_slice(&report_data[..copy_len]);
 
-        // Placeholder attestation data
-        let attestation_data = serde_json::json!({
-            "platform": "amd-sev-snp",
-            "version": crate::HAL_VERSION,
-            "timestamp": std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            "measurements": {
-                "bootloader": "placeholder_hash",
-                "kernel": "placeholder_hash",
-                "hal": "placeholder_hash"
-            },
-            "report_data": hex::encode(&report_data_padded)
-        });
+        #[cfg(all(feature = "amd-sev", target_arch = "x86_64"))]
+        {
+            if crate::sev_vtpm::is_available() {
+                return crate::sev_vtpm::attest(report_data).await;
+            }
+        }
 
-        Ok(attestation_data.to_string().into_bytes())
+        Err(HalError::PlatformNotSupported(
+            "AMD SEV attestation requires either an Azure vTPM (HCL report) or a \
+             /dev/sev-guest device with TSM support; neither is available"
+                .to_string(),
+        ))
     }
 
     /// Intel TDX attestation — returns the compact measurements JSON

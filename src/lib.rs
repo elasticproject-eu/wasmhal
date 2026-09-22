@@ -20,6 +20,8 @@ pub mod gpu;
 pub mod platform;
 pub mod random;
 pub mod resources;
+#[cfg(all(feature = "amd-sev", target_arch = "x86_64"))]
+pub mod sev_vtpm;
 pub mod sockets;
 pub mod storage;
 

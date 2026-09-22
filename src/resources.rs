@@ -269,9 +269,9 @@ impl ResourceInterface {
 
         log::info!(
             "Allocated {:?} resources: {} units for requester {}",
-            &request.resource_type,
+            request.resource_type,
             request.amount,
-            &allocation.requester
+            allocation.requester
         );
 
         allocations.insert(allocation_id.clone(), allocation);
