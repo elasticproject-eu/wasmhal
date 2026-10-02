@@ -28,8 +28,10 @@ pub mod storage;
 // Modular interface system
 pub mod enforcement;
 pub mod interfaces;
+#[cfg(all(feature = "intel-tdx", target_arch = "x86_64"))]
 pub mod ita;
 pub mod providers;
+#[cfg(all(feature = "intel-tdx", target_arch = "x86_64"))]
 pub mod tdx_quote;
 
 // Re-export main types

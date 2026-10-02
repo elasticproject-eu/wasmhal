@@ -367,6 +367,22 @@ impl ElasticTeeHal {
     /// deliberately *not* what the WIT `attestation` host call returns to
     /// WASM workloads.
     async fn intel_tdx_attest(&self, report_data: &[u8]) -> HalResult<Vec<u8>> {
+        #[cfg(all(feature = "intel-tdx", target_arch = "x86_64"))]
+        {
+            self.intel_tdx_attest_impl(report_data).await
+        }
+
+        #[cfg(not(all(feature = "intel-tdx", target_arch = "x86_64")))]
+        {
+            let _ = report_data;
+            Err(HalError::PlatformNotSupported(
+                "Intel TDX attestation requires the `intel-tdx` feature".into(),
+            ))
+        }
+    }
+
+    #[cfg(all(feature = "intel-tdx", target_arch = "x86_64"))]
+    async fn intel_tdx_attest_impl(&self, report_data: &[u8]) -> HalResult<Vec<u8>> {
         log::info!(
             "Generating Intel TDX attestation quote with {} bytes of report data",
             report_data.len()
@@ -434,37 +450,51 @@ impl ElasticTeeHal {
             ));
         }
 
+        #[cfg(not(all(feature = "intel-tdx", target_arch = "x86_64")))]
+        {
+            let _ = user_data;
+            return Err(HalError::PlatformNotSupported(
+                "The ITA round-trip requires the `intel-tdx` feature".to_string(),
+            ));
+        }
+
+        #[cfg(all(feature = "intel-tdx", target_arch = "x86_64"))]
         let ita_client = crate::ita::ItaClient::from_env().ok_or_else(|| {
             HalError::TeeInitializationFailed(
                 "ITA_API_KEY env var not set; cannot run ITA round-trip".to_string(),
             )
         })?;
 
-        // Pad user_data to 64 bytes for ITA's runtime_data field.
-        if user_data.len() > 64 {
-            return Err(HalError::InvalidParameter("Userdata too long".into()));
+        #[cfg(all(feature = "intel-tdx", target_arch = "x86_64"))]
+        {
+            // Pad user_data to 64 bytes for ITA's runtime_data field.
+            if user_data.len() > 64 {
+                return Err(HalError::InvalidParameter("Userdata too long".into()));
+            }
+            let mut user_data_padded = [0u8; 64];
+            let copy_len = user_data.len().min(64);
+            user_data_padded[..copy_len].copy_from_slice(&user_data[..copy_len]);
+
+            // Step 1+2: fetch nonce, derive REPORTDATA.
+            let (ita_report_data, nonce_state) = ita_client
+                .fetch_nonce_and_report_data(&user_data_padded)
+                .await
+                .map_err(|e| {
+                    HalError::TeeInitializationFailed(format!("ITA nonce fetch: {}", e))
+                })?;
+
+            // Step 3: regenerate the quote with ITA's REPORTDATA.
+            let ita_quote = self.get_tdx_quote_via_tsm(&ita_report_data)?;
+
+            // Step 4+5: submit and receive EAR JWT.
+            let ear_jwt = ita_client
+                .attest_with_nonce(&ita_quote, &user_data_padded, &nonce_state)
+                .await
+                .map_err(|e| HalError::TeeInitializationFailed(format!("ITA attest: {}", e)))?;
+
+            log::info!("ITA round-trip complete, EAR JWT {} bytes", ear_jwt.len());
+            Ok(ear_jwt)
         }
-        let mut user_data_padded = [0u8; 64];
-        let copy_len = user_data.len().min(64);
-        user_data_padded[..copy_len].copy_from_slice(&user_data[..copy_len]);
-
-        // Step 1+2: fetch nonce, derive REPORTDATA.
-        let (ita_report_data, nonce_state) = ita_client
-            .fetch_nonce_and_report_data(&user_data_padded)
-            .await
-            .map_err(|e| HalError::TeeInitializationFailed(format!("ITA nonce fetch: {}", e)))?;
-
-        // Step 3: regenerate the quote with ITA's REPORTDATA.
-        let ita_quote = self.get_tdx_quote_via_tsm(&ita_report_data)?;
-
-        // Step 4+5: submit and receive EAR JWT.
-        let ear_jwt = ita_client
-            .attest_with_nonce(&ita_quote, &user_data_padded, &nonce_state)
-            .await
-            .map_err(|e| HalError::TeeInitializationFailed(format!("ITA attest: {}", e)))?;
-
-        log::info!("ITA round-trip complete, EAR JWT {} bytes", ear_jwt.len());
-        Ok(ear_jwt)
     }
 
     /// Obtain a raw TDX DCAP quote via the Linux TSM (Trusted Security Module)
@@ -476,6 +506,7 @@ impl ElasticTeeHal {
     ///   2. write  report_data  →  inblob
     ///   3. read   outblob      →  raw TDX quote bytes
     ///   4. rmdir  the entry
+    #[cfg(all(feature = "intel-tdx", target_arch = "x86_64"))]
     fn get_tdx_quote_via_tsm(&self, report_data: &[u8; 64]) -> HalResult<Vec<u8>> {
         let tsm_base = "/sys/kernel/config/tsm/report";
 

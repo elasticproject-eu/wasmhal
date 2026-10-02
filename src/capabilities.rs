@@ -71,7 +71,9 @@ impl PlatformCapabilities {
                 dynamic_resources: true,
                 event_handling: true,
                 internal_communication: true,
-                attestation: true,
+                // Requires the `amd-sev` feature; without it `attestation()`
+                // has no evidence source and returns PlatformNotSupported.
+                attestation: cfg!(all(feature = "amd-sev", target_arch = "x86_64")),
             },
             PlatformType::IntelTdx => CapabilityFeatures {
                 clock: true,                  // ✅ Fully implemented with TSC
@@ -86,7 +88,9 @@ impl PlatformCapabilities {
                 dynamic_resources: true,      // ✅ Fully implemented with TEE overhead accounting
                 event_handling: true,         // ✅ Fully implemented with secure channels
                 internal_communication: true, // ✅ Fully implemented with TDX memory encryption
-                attestation: true,            // ✅ Fully implemented with TD Quote + MRTD/RTMR
+                // TD Quote + MRTD/RTMR via the Linux TSM, behind the
+                // `intel-tdx` feature.
+                attestation: cfg!(all(feature = "intel-tdx", target_arch = "x86_64")),
             },
         };
 

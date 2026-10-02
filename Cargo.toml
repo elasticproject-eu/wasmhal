@@ -71,10 +71,16 @@ az-cvm-vtpm = { version = "0.8", optional = true }
 az-snp-vtpm = { version = "0.8", default-features = false, features = ["attester"], optional = true }
 
 [features]
-default = ["amd-sev"]
+default = ["amd-sev", "intel-tdx"]
 # `amd-sev` covers both bare-metal /dev/sev-guest guests and Azure SEV-SNP CVMs
 # whose evidence comes from the vTPM.
 amd-sev = ["dep:az-cvm-vtpm", "dep:az-snp-vtpm"]
+# `intel-tdx` covers TDX guests that expose the Linux TSM (`/dev/tdx_guest`),
+# which is how bare-metal, GCE C3/C4 and other TDX cloud instances report.
+# It needs no platform library, so a TDX-only build can drop the Azure vTPM
+# dependencies that `amd-sev` pulls in. Without it, `attestation()` on a TDX
+# guest returns `PlatformNotSupported` instead of silently reporting a stub.
+intel-tdx = []
 gpu = ["wgpu"]
 component = ["wasmtime", "cargo-component"]
 wasmtime = ["dep:wasmtime"]
