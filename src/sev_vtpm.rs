@@ -26,6 +26,13 @@ use crate::error::{HalError, HalResult};
 
 /// Whether the Azure vTPM evidence source is usable on this host.
 pub fn is_available() -> bool {
+    // Ask the TPM only on a host that could hold an Azure HCL report. The
+    // `is_snp_cvm` probe below opens the device and, when it fails, the tss2 C
+    // layer writes the error to stderr where no `log` filter can reach it.
+    if !crate::platform::is_azure_host() {
+        return false;
+    }
+
     let has_vtpm =
         std::path::Path::new("/dev/tpm0").exists() || std::path::Path::new("/dev/tpmrm0").exists();
     if !has_vtpm {

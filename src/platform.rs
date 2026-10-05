@@ -131,15 +131,23 @@ impl ElasticTeeHal {
             // Azure confidential VMs run behind a paravisor: none of the SEV
             // device nodes or the TSM configfs exist, but the guest does have a
             // vTPM carrying an HCL report. Treat that as SEV-SNP too.
+            //
+            // Only ask the vTPM on a host that could actually answer — see
+            // `is_azure_host`. The probe opens the TPM and reads an Azure NV
+            // index, and its failure path writes to stderr from inside the tss2
+            // C layer, which no log filter can suppress.
             let has_vtpm = std::path::Path::new("/dev/tpm0").exists()
                 || std::path::Path::new("/dev/tpmrm0").exists();
-            let azure_vtpm = has_vtpm && Self::is_azure_snp_vtpm();
+            let on_azure = is_azure_host();
+            let azure_vtpm = has_vtpm && on_azure && Self::is_azure_snp_vtpm();
 
             log::debug!("AMD SEV Detection:");
             log::debug!("  - AMD CPU: {}", is_amd);
             log::debug!("  - /dev/sev-guest: {}", has_sev_guest);
             log::debug!("  - /dev/sev: {}", has_sev_dev);
             log::debug!("  - TSM support: {}", has_tsm);
+            log::debug!("  - vTPM: {}", has_vtpm);
+            log::debug!("  - Azure host: {}", on_azure);
             log::debug!("  - Azure vTPM (SNP): {}", azure_vtpm);
 
             azure_vtpm || (is_amd && (has_sev_guest || has_sev_dev) && has_tsm)
@@ -608,4 +616,46 @@ impl Default for ElasticTeeHal {
 /// Check if Intel TDX is available (standalone function for external use)
 pub fn is_intel_tdx_available() -> bool {
     ElasticTeeHal::is_intel_tdx_available()
+}
+
+/// Whether this guest runs on Azure, from the DMI system vendor.
+///
+/// The vTPM evidence path is specific to Azure confidential VMs, and asking the
+/// vTPM whether it holds an Azure HCL report is not a cheap question: the probe
+/// opens the TPM and reads an NV index, and every way that can fail — no such
+/// index, or an unprivileged caller that cannot open the device at all — is
+/// reported by the tss2 C layer straight to stderr, past any `log` filter.
+///
+/// A guest with a vTPM is therefore not enough. GCP instances get one from
+/// `--shielded-vtpm`, and a TDX guest has one too, so probing on the strength
+/// of `/dev/tpm0` alone paints a wall of `esys`/`tcti` errors on both and
+/// buries whatever the real failure is. One file read keeps the probe on hosts
+/// that could actually answer.
+pub(crate) fn is_azure_host() -> bool {
+    std::fs::read_to_string("/sys/class/dmi/id/sys_vendor")
+        .map(|vendor| is_azure_vendor(&vendor))
+        .unwrap_or(false)
+}
+
+fn is_azure_vendor(vendor: &str) -> bool {
+    vendor.to_ascii_lowercase().contains("microsoft")
+}
+
+#[cfg(test)]
+mod azure_detection_tests {
+    use super::is_azure_vendor;
+
+    #[test]
+    fn azure_vendor_is_recognised() {
+        assert!(is_azure_vendor("Microsoft Corporation\n"));
+        assert!(is_azure_vendor("microsoft corporation"));
+    }
+
+    #[test]
+    fn other_vendors_are_not() {
+        assert!(!is_azure_vendor("Google\n"));
+        assert!(!is_azure_vendor("Google Compute Engine"));
+        assert!(!is_azure_vendor("Amazon EC2"));
+        assert!(!is_azure_vendor(""));
+    }
 }
