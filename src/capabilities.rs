@@ -71,7 +71,9 @@ impl PlatformCapabilities {
                 dynamic_resources: true,
                 event_handling: true,
                 internal_communication: true,
-                attestation: true,
+                // Requires an evidence source *on this host*, not merely the
+                // `amd-sev` feature: the Azure vTPM or the TSM firmware path.
+                attestation: crate::platform::ElasticTeeHal::attestation_available(&platform_type),
             },
             PlatformType::IntelTdx => CapabilityFeatures {
                 clock: true,                  // ✅ Fully implemented with TSC
@@ -86,7 +88,10 @@ impl PlatformCapabilities {
                 dynamic_resources: true,      // ✅ Fully implemented with TEE overhead accounting
                 event_handling: true,         // ✅ Fully implemented with secure channels
                 internal_communication: true, // ✅ Fully implemented with TDX memory encryption
-                attestation: true,            // ✅ Fully implemented with TD Quote + MRTD/RTMR
+                // TD Quote + MRTD/RTMR via the Linux TSM, present only on a
+                // host that actually exposes the TDX guest device and the TSM
+                // configfs.
+                attestation: crate::platform::ElasticTeeHal::attestation_available(&platform_type),
             },
         };
 
@@ -217,8 +222,28 @@ mod tests {
     fn test_amd_sev_capabilities() {
         let caps = PlatformCapabilities::new(PlatformType::AmdSev);
         assert!(caps.features.gpu_compute);
-        assert!(caps.features.attestation);
         assert!(caps.is_feature_supported("gpu_compute"));
+    }
+
+    /// The advertised attestation capability must match what the host can
+    /// actually produce.
+    ///
+    /// Asserting it is simply `true` would only hold on a machine that is both
+    /// built with the right feature and running on SEV-SNP hardware, so the
+    /// assertion is agreement with the probe instead. That is the property that
+    /// matters: a caller must not be told attestation works when `attest()` is
+    /// about to return `PlatformNotSupported`.
+    #[test]
+    fn attestation_capability_matches_the_host() {
+        for platform_type in [PlatformType::AmdSev, PlatformType::IntelTdx] {
+            let caps = PlatformCapabilities::new(platform_type.clone());
+            assert_eq!(
+                caps.features.attestation,
+                crate::platform::ElasticTeeHal::attestation_available(&platform_type),
+                "attestation capability disagrees with the host probe for {:?}",
+                platform_type
+            );
+        }
     }
 
     #[test]

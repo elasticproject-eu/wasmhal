@@ -67,14 +67,26 @@ base64 = "0.22"
 # Azure SEV-SNP attestation via the guest vTPM (HCL report + TPM quote).
 # Used by the `amd-sev` feature on Azure CVMs, where the paravisor exposes a
 # vTPM instead of /dev/sev-guest.
+#
+# x86_64 only: `az-snp-vtpm` links `tss-esapi`, which has no aarch64 or riscv64
+# support. Keeping these target-scoped means a consumer that enables `amd-sev`
+# unconditionally (e.g. a default feature) still cross-compiles for arm64 and
+# riscv64 — the feature simply resolves to nothing there.
+[target.'cfg(target_arch = "x86_64")'.dependencies]
 az-cvm-vtpm = { version = "0.8", optional = true }
 az-snp-vtpm = { version = "0.8", default-features = false, features = ["attester"], optional = true }
 
 [features]
-default = ["amd-sev"]
+default = ["amd-sev", "intel-tdx"]
 # `amd-sev` covers both bare-metal /dev/sev-guest guests and Azure SEV-SNP CVMs
 # whose evidence comes from the vTPM.
 amd-sev = ["dep:az-cvm-vtpm", "dep:az-snp-vtpm"]
+# `intel-tdx` covers TDX guests that expose the Linux TSM (`/dev/tdx_guest`),
+# which is how bare-metal, GCE C3/C4 and other TDX cloud instances report.
+# It needs no platform library, so a TDX-only build can drop the Azure vTPM
+# dependencies that `amd-sev` pulls in. Without it, `attestation()` on a TDX
+# guest returns `PlatformNotSupported` instead of silently reporting a stub.
+intel-tdx = []
 gpu = ["wgpu"]
 component = ["wasmtime", "cargo-component"]
 wasmtime = ["dep:wasmtime"]
