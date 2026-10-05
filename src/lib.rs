@@ -21,7 +21,16 @@ pub mod platform;
 pub mod random;
 pub mod resources;
 #[cfg(all(feature = "amd-sev", target_arch = "x86_64"))]
+pub mod sev_snp_tsm;
+#[cfg(all(feature = "amd-sev", target_arch = "x86_64"))]
 pub mod sev_vtpm;
+// Parsing of the firmware-signed AMD SEV-SNP attestation report. Kept
+// unconditional: it is pure layout decoding with no vendor dependency, so it
+// stays testable (and reusable) in builds without `amd-sev`.
+pub mod snp_report;
+// Vendor-neutral TSM report requests and the running-binary hash, shared by
+// the TDX and SEV-SNP paths.
+pub mod attestation;
 pub mod sockets;
 pub mod storage;
 

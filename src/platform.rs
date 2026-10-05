@@ -161,13 +161,59 @@ impl ElasticTeeHal {
     /// Extracted so detection and the attestation error path cannot disagree
     /// about what "available" means: a second, drifting copy of this path would
     /// let the error claim a device is missing while it is present.
-    fn has_sev_guest_device() -> bool {
+    pub(crate) fn has_sev_guest_device() -> bool {
         std::path::Path::new("/dev/sev-guest").exists()
     }
 
     /// Whether the Linux TSM configfs used to request an SNP report is mounted.
-    fn has_tsm_support() -> bool {
-        std::path::Path::new("/sys/kernel/config/tsm/report").exists()
+    pub(crate) fn has_tsm_support() -> bool {
+        crate::attestation::tsm_available()
+    }
+
+    /// Whether an attestation evidence source is actually present on this host.
+    ///
+    /// Reported through `PlatformCapabilities::features.attestation` so that a
+    /// workload asking "can you attest?" gets an answer that reflects the guest
+    /// it is running on. Deriving that flag from `cfg!` alone would answer
+    /// "yes" on any host built with the feature, including one with no TSM
+    /// configfs, no attestation device, or no vTPM — sending the caller straight
+    /// into a `PlatformNotSupported` failure it had been told would not happen.
+    ///
+    /// Only cheap structural checks (device and configfs existence) are used.
+    /// Deliberately does *not* probe the Azure vTPM: that opens the device, and
+    /// the tss2 C layer reports failures straight to stderr past any log filter,
+    /// which is far too heavy and noisy for a capability query.
+    pub(crate) fn attestation_available(platform_type: &PlatformType) -> bool {
+        match platform_type {
+            PlatformType::AmdSev => {
+                #[cfg(all(feature = "amd-sev", target_arch = "x86_64"))]
+                {
+                    let on_azure = is_azure_host();
+                    let has_vtpm = std::path::Path::new("/dev/tpm0").exists()
+                        || std::path::Path::new("/dev/tpmrm0").exists();
+
+                    // Azure: the paravisor's vTPM is the only source, and it
+                    // hides /dev/sev-guest. Elsewhere the firmware serves the
+                    // report through the TSM.
+                    (on_azure && has_vtpm)
+                        || (Self::has_sev_guest_device() && Self::has_tsm_support())
+                }
+                #[cfg(not(all(feature = "amd-sev", target_arch = "x86_64")))]
+                {
+                    false
+                }
+            }
+            PlatformType::IntelTdx => {
+                #[cfg(all(feature = "intel-tdx", target_arch = "x86_64"))]
+                {
+                    std::path::Path::new("/dev/tdx_guest").exists() && Self::has_tsm_support()
+                }
+                #[cfg(not(all(feature = "intel-tdx", target_arch = "x86_64")))]
+                {
+                    false
+                }
+            }
+        }
     }
 
     /// Whether this guest is an Azure SEV-SNP CVM, determined by asking the
@@ -342,16 +388,18 @@ impl ElasticTeeHal {
     ///    over the requested report data, returned as the same JSON shape the
     ///    `az-snp-vtpm` attester produces (the format Trustee's
     ///    `az_snp_vtpm` verifier consumes).
-    /// 2. **Bare metal / non-Azure** — no provider is wired yet; returns a
-    ///    clear error rather than synthetic data, so a caller can tell an
-    ///    unimplemented path from a failed one.
+    /// 2. **Bare metal and GCP** — the guest exposes `/dev/sev-guest` and the
+    ///    firmware serves the report through the Linux TSM configfs, exactly as
+    ///    TDX does. Returns the same `{"measurements": {...}}` document as the
+    ///    TDX path, because that is the shape the WIT `attestation` host call
+    ///    already promises. See [`crate::sev_snp_tsm`].
     async fn amd_sev_attest(&self, report_data: &[u8]) -> HalResult<Vec<u8>> {
         log::info!(
             "Generating AMD SEV attestation with {} bytes of report data",
             report_data.len()
         );
 
-        if report_data.len() > 64 {
+        if report_data.len() > crate::attestation::REPORT_DATA_LEN {
             return Err(HalError::InvalidParameter(
                 "report_data must be at most 64 bytes".into(),
             ));
@@ -359,8 +407,14 @@ impl ElasticTeeHal {
 
         #[cfg(all(feature = "amd-sev", target_arch = "x86_64"))]
         {
+            // Azure first: its paravisor hides /dev/sev-guest, so the vTPM is
+            // the only evidence available there.
             if crate::sev_vtpm::is_available() {
                 return crate::sev_vtpm::attest(report_data).await;
+            }
+
+            if crate::sev_snp_tsm::is_available() {
+                return crate::sev_snp_tsm::attest(report_data);
             }
         }
 
@@ -522,93 +576,14 @@ impl ElasticTeeHal {
         }
     }
 
-    /// Obtain a raw TDX DCAP quote via the Linux TSM (Trusted Security Module)
-    /// configfs interface at /sys/kernel/config/tsm/report/.
+    /// Obtain a raw TDX DCAP quote via the Linux TSM configfs interface.
     ///
-    /// This is the recommended method on Linux kernels >= 6.7.
-    /// Steps:
-    ///   1. mkdir  /sys/kernel/config/tsm/report/<unique-name>
-    ///   2. write  report_data  →  inblob
-    ///   3. read   outblob      →  raw TDX quote bytes
-    ///   4. rmdir  the entry
+    /// The request mechanics are vendor-neutral and live in
+    /// [`crate::attestation::request_report`]; this exists to keep the TDX
+    /// feature gate on the call.
     #[cfg(all(feature = "intel-tdx", target_arch = "x86_64"))]
     fn get_tdx_quote_via_tsm(&self, report_data: &[u8; 64]) -> HalResult<Vec<u8>> {
-        let tsm_base = "/sys/kernel/config/tsm/report";
-
-        if !std::path::Path::new(tsm_base).exists() {
-            return Err(HalError::TeeInitializationFailed(
-                "TSM configfs not available at /sys/kernel/config/tsm/report".to_string(),
-            ));
-        }
-
-        // Use a timestamp-derived unique name to avoid collisions
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let entry_name = format!("hal_quote_{}", ts);
-        let entry_path = format!("{}/{}", tsm_base, entry_name);
-
-        // Create the report entry directory
-        std::fs::create_dir(&entry_path).map_err(|e| {
-            HalError::TeeInitializationFailed(format!(
-                "Failed to create TSM report entry '{}': {}",
-                entry_path, e
-            ))
-        })?;
-
-        // The kernel creates inblob/outblob as root-owned (--w------- / r--r--r--).
-        // Fix permissions so our user can write inblob and read outblob.
-        let chmod_result = std::process::Command::new("sudo")
-            .args([
-                "sh",
-                "-c",
-                &format!(
-                    "chmod o+w {}/inblob && chmod o+r {}/outblob",
-                    entry_path, entry_path
-                ),
-            ])
-            .status();
-        if chmod_result.map(|s| !s.success()).unwrap_or(true) {
-            let _ = std::fs::remove_dir(&entry_path);
-            return Err(HalError::TeeInitializationFailed(
-                "Failed to chmod TSM entry files (sudo required)".to_string(),
-            ));
-        }
-
-        // Write report_data (inblob) — this triggers the kernel to prepare the quote
-        let inblob_path = format!("{}/inblob", entry_path);
-        if let Err(e) = std::fs::write(&inblob_path, report_data.as_ref()) {
-            let _ = std::fs::remove_dir(&entry_path);
-            return Err(HalError::TeeInitializationFailed(format!(
-                "Failed to write TSM inblob: {}",
-                e
-            )));
-        }
-
-        // Read the quote (outblob)
-        let outblob_path = format!("{}/outblob", entry_path);
-        let quote = match std::fs::read(&outblob_path) {
-            Ok(data) => data,
-            Err(e) => {
-                let _ = std::fs::remove_dir(&entry_path);
-                return Err(HalError::TeeInitializationFailed(format!(
-                    "Failed to read TSM outblob (quote): {}",
-                    e
-                )));
-            }
-        };
-
-        // Clean up the report entry
-        let _ = std::fs::remove_dir(&entry_path);
-
-        if quote.is_empty() {
-            return Err(HalError::TeeInitializationFailed(
-                "TSM returned an empty quote".to_string(),
-            ));
-        }
-
-        Ok(quote)
+        crate::attestation::request_report("tdx", report_data)
     }
 
     /// Verify an attestation report
@@ -660,15 +635,11 @@ fn is_azure_vendor(vendor: &str) -> bool {
 
 /// Explain why AMD SEV-SNP attestation could not be produced on this host.
 ///
-/// It is tempting to report "neither evidence source is available" whenever no
-/// evidence was produced, but that is false on a GCP or bare-metal SNP guest:
-/// `/dev/sev-guest` and the TSM configfs are both present, and the reason
-/// attestation fails is that no provider reads them yet. Those are different
-/// problems with different fixes, so distinguish them — a GCP user told to look
-/// for a missing device node will find one and conclude the message is bogus.
-///
-/// The Azure case is separated for the same reason: there the vTPM is the only
-/// evidence source, so "no usable vTPM" is the actionable fact.
+/// Both evidence sources are now implemented (Azure vTPM, and the TSM path used
+/// by bare metal and GCP), so reaching this function means the guest looks like
+/// SEV-SNP but exposes neither usable source. Say which ingredient is absent:
+/// the Azure case needs a vTPM, the others need the firmware device plus the TSM
+/// configfs, and those are fixed in different ways.
 fn amd_sev_attest_unsupported_reason(
     on_azure: bool,
     has_sev_guest: bool,
@@ -680,14 +651,20 @@ fn amd_sev_attest_unsupported_reason(
                 vTPM was found on this guest";
     }
 
-    if has_sev_guest && has_tsm {
-        return "AMD SEV-SNP was detected via /dev/sev-guest and the Linux TSM, but \
-                attestation is not implemented for that path yet: this crate currently \
-                produces evidence only on Azure vTPM guests";
+    if !has_sev_guest {
+        return "AMD SEV-SNP attestation needs /dev/sev-guest to reach the firmware \
+                 attestation interface, which is absent on this guest";
     }
 
-    "AMD SEV-SNP attestation requires either an Azure vTPM or a /dev/sev-guest \
-     device with Linux TSM support; neither is available on this host"
+    if !has_tsm {
+        return "AMD SEV-SNP attestation needs the Linux TSM configfs at \
+                 /sys/kernel/config/tsm/report to request a report (Linux 6.7+), \
+                 which is not mounted on this guest";
+    }
+
+    "AMD SEV-SNP attestation found both /dev/sev-guest and the Linux TSM but \
+     neither evidence source produced a report; enable the `amd-sev` feature if \
+     it is disabled"
 }
 
 #[cfg(test)]
@@ -708,33 +685,35 @@ mod detection_tests {
         assert!(!is_azure_vendor(""));
     }
 
-    /// A GCP SNP guest has both the device node and the TSM configfs, so the
-    /// error must blame the missing provider rather than absent hardware.
+    /// A GCP or bare-metal SNP guest with both ingredients present is no longer an
+    /// unimplemented path, so the error must not blame absent hardware.
     #[test]
-    fn gcp_guest_is_told_the_provider_is_missing_not_the_device() {
+    fn guest_with_both_ingredients_is_not_blamed_for_missing_hardware() {
         let reason = amd_sev_attest_unsupported_reason(false, true, true);
+        assert!(
+            !reason.contains("/dev/sev-guest to reach"),
+            "must not claim the device is absent, got: {}",
+            reason
+        );
+        assert!(
+            !reason.contains("not mounted"),
+            "must not claim the TSM configfs is absent, got: {}",
+            reason
+        );
+    }
 
-        assert!(
-            reason.contains("not implemented for that path yet"),
-            "expected the unimplemented-provider explanation, got: {}",
-            reason
-        );
-        assert!(
-            !reason.contains("neither is available"),
-            "must not blame absent devices that are present, got: {}",
-            reason
-        );
+    #[test]
+    fn missing_device_and_missing_tsm_are_reported_separately() {
+        let no_device = amd_sev_attest_unsupported_reason(false, false, true);
+        assert!(no_device.contains("/dev/sev-guest"), "got: {}", no_device);
+
+        let no_tsm = amd_sev_attest_unsupported_reason(false, true, false);
+        assert!(no_tsm.contains("tsm/report"), "got: {}", no_tsm);
     }
 
     #[test]
     fn azure_guest_is_told_the_vtpm_is_unusable() {
         let reason = amd_sev_attest_unsupported_reason(true, false, false);
         assert!(reason.contains("no usable vTPM"), "got: {}", reason);
-    }
-
-    #[test]
-    fn host_without_sev_support_is_told_support_is_absent() {
-        let reason = amd_sev_attest_unsupported_reason(false, false, false);
-        assert!(reason.contains("neither is available"), "got: {}", reason);
     }
 }

@@ -51,8 +51,6 @@
 //! Reference: Intel TDX DCAP Quote Generation Library, `td_quote_body_v4`
 //! struct in `Intel/SGXDataCenterAttestationPrimitives`.
 
-use sha2::{Digest, Sha256};
-
 /// Byte length of MRTD and each RTMR (SHA-384 digests).
 pub const MEASUREMENT_LEN: usize = 48;
 
@@ -126,23 +124,9 @@ impl TdxMeasurements {
 
 /// Compute SHA-256 of the currently running HAL binary (`/proc/self/exe`).
 ///
-/// This identifies which HAL build produced the attestation. If the binary
-/// can't be read for any reason we return all-zero, which is a deliberate
-/// "unknown" sentinel rather than a failure — the MRTD/RTMR values from the
-/// hardware are the security-critical fields.
-pub fn compute_hal_hash() -> [u8; 32] {
-    match std::fs::read("/proc/self/exe") {
-        Ok(bytes) => {
-            let mut hasher = Sha256::new();
-            hasher.update(&bytes);
-            hasher.finalize().into()
-        }
-        Err(e) => {
-            log::warn!("Failed to read /proc/self/exe for HAL hash: {}", e);
-            [0u8; 32]
-        }
-    }
-}
+/// Re-exported from [`crate::attestation`], where it lives because the AMD
+/// SEV-SNP evidence document needs the same value.
+pub use crate::attestation::compute_hal_hash;
 
 #[cfg(test)]
 mod tests {
