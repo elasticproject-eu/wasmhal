@@ -176,7 +176,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut rate_limited = 0;
 
         // Try to exceed rate limit (1000 ops/sec + burst)
-        for i in 0..3000 {
+        for _ in 0..3000 {
             match crypto.hash(b"test", "SHA-256") {
                 Ok(_) => successes += 1,
                 Err(e) if e.contains("Rate limit") => rate_limited += 1,
