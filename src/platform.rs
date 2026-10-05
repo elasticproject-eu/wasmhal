@@ -120,13 +120,13 @@ impl ElasticTeeHal {
             let is_amd = Self::is_amd_cpu();
 
             // Check for SEV guest device (SNP environments)
-            let has_sev_guest = std::path::Path::new("/dev/sev-guest").exists();
+            let has_sev_guest = Self::has_sev_guest_device();
 
             // Check for SEV device (host environments)
             let has_sev_dev = std::path::Path::new("/dev/sev").exists();
 
             // Check for TSM support (Trust Security Module for attestation)
-            let has_tsm = std::path::Path::new("/sys/kernel/config/tsm/report").exists();
+            let has_tsm = Self::has_tsm_support();
 
             // Azure confidential VMs run behind a paravisor: none of the SEV
             // device nodes or the TSM configfs exist, but the guest does have a
@@ -154,6 +154,20 @@ impl ElasticTeeHal {
         }
         #[cfg(not(target_arch = "x86_64"))]
         false
+    }
+
+    /// Whether the SEV-SNP guest device node is present.
+    ///
+    /// Extracted so detection and the attestation error path cannot disagree
+    /// about what "available" means: a second, drifting copy of this path would
+    /// let the error claim a device is missing while it is present.
+    fn has_sev_guest_device() -> bool {
+        std::path::Path::new("/dev/sev-guest").exists()
+    }
+
+    /// Whether the Linux TSM configfs used to request an SNP report is mounted.
+    fn has_tsm_support() -> bool {
+        std::path::Path::new("/sys/kernel/config/tsm/report").exists()
     }
 
     /// Whether this guest is an Azure SEV-SNP CVM, determined by asking the
@@ -351,9 +365,12 @@ impl ElasticTeeHal {
         }
 
         Err(HalError::PlatformNotSupported(
-            "AMD SEV attestation requires either an Azure vTPM (HCL report) or a \
-             /dev/sev-guest device with TSM support; neither is available"
-                .to_string(),
+            amd_sev_attest_unsupported_reason(
+                is_azure_host(),
+                Self::has_sev_guest_device(),
+                Self::has_tsm_support(),
+            )
+            .to_string(),
         ))
     }
 
@@ -641,9 +658,41 @@ fn is_azure_vendor(vendor: &str) -> bool {
     vendor.to_ascii_lowercase().contains("microsoft")
 }
 
+/// Explain why AMD SEV-SNP attestation could not be produced on this host.
+///
+/// It is tempting to report "neither evidence source is available" whenever no
+/// evidence was produced, but that is false on a GCP or bare-metal SNP guest:
+/// `/dev/sev-guest` and the TSM configfs are both present, and the reason
+/// attestation fails is that no provider reads them yet. Those are different
+/// problems with different fixes, so distinguish them — a GCP user told to look
+/// for a missing device node will find one and conclude the message is bogus.
+///
+/// The Azure case is separated for the same reason: there the vTPM is the only
+/// evidence source, so "no usable vTPM" is the actionable fact.
+fn amd_sev_attest_unsupported_reason(
+    on_azure: bool,
+    has_sev_guest: bool,
+    has_tsm: bool,
+) -> &'static str {
+    if on_azure {
+        return "AMD SEV-SNP attestation on Azure reads its evidence from the guest \
+                vTPM (an HCL report plus a quote over the report data), but no usable \
+                vTPM was found on this guest";
+    }
+
+    if has_sev_guest && has_tsm {
+        return "AMD SEV-SNP was detected via /dev/sev-guest and the Linux TSM, but \
+                attestation is not implemented for that path yet: this crate currently \
+                produces evidence only on Azure vTPM guests";
+    }
+
+    "AMD SEV-SNP attestation requires either an Azure vTPM or a /dev/sev-guest \
+     device with Linux TSM support; neither is available on this host"
+}
+
 #[cfg(test)]
-mod azure_detection_tests {
-    use super::is_azure_vendor;
+mod detection_tests {
+    use super::{amd_sev_attest_unsupported_reason, is_azure_vendor};
 
     #[test]
     fn azure_vendor_is_recognised() {
@@ -657,5 +706,35 @@ mod azure_detection_tests {
         assert!(!is_azure_vendor("Google Compute Engine"));
         assert!(!is_azure_vendor("Amazon EC2"));
         assert!(!is_azure_vendor(""));
+    }
+
+    /// A GCP SNP guest has both the device node and the TSM configfs, so the
+    /// error must blame the missing provider rather than absent hardware.
+    #[test]
+    fn gcp_guest_is_told_the_provider_is_missing_not_the_device() {
+        let reason = amd_sev_attest_unsupported_reason(false, true, true);
+
+        assert!(
+            reason.contains("not implemented for that path yet"),
+            "expected the unimplemented-provider explanation, got: {}",
+            reason
+        );
+        assert!(
+            !reason.contains("neither is available"),
+            "must not blame absent devices that are present, got: {}",
+            reason
+        );
+    }
+
+    #[test]
+    fn azure_guest_is_told_the_vtpm_is_unusable() {
+        let reason = amd_sev_attest_unsupported_reason(true, false, false);
+        assert!(reason.contains("no usable vTPM"), "got: {}", reason);
+    }
+
+    #[test]
+    fn host_without_sev_support_is_told_support_is_absent() {
+        let reason = amd_sev_attest_unsupported_reason(false, false, false);
+        assert!(reason.contains("neither is available"), "got: {}", reason);
     }
 }
