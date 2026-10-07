@@ -533,13 +533,13 @@ pub struct PlatformCapabilities {
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! In short: open an issue first for larger changes, work on a branch, make sure `cargo fmt`, `cargo clippy` and `cargo test` pass, and open a pull request against `main`. See the [Contributing Guide](CONTRIBUTING.md) for details.
 
 ### Development Setup
 
 ```bash
 # Clone the repository
-git clone https://github.com/syafiq/wasmhal.git
+git clone https://github.com/elasticproject-eu/wasmhal.git
 cd wasmhal
 
 # Install Rust toolchain
@@ -567,10 +567,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **AMD and Intel** - For TEE platform documentation and support
 - **Rust Community** - For excellent async and cryptographic libraries
 
+## Funding
+
+This work has been partially supported by the [ELASTIC project](https://elasticproject.eu/), which received funding from the [Smart Networks and Services Joint Undertaking](https://smart-networks.europa.eu/) (SNS JU) under the European Union’s [Horizon Europe](https://research-and-innovation.ec.europa.eu/funding/funding-opportunities/funding-programmes-and-open-calls/horizon-europe_en) research and innovation programme under [Grant Agreement No. 101139067](https://cordis.europa.eu/project/id/101139067). Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union. Neither the European Union nor the granting authority can be held responsible for them.
+
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/syafiq/wasmhal/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/syafiq/wasmhal/discussions)
+- **Issues**: [GitHub Issues](https://github.com/elasticproject-eu/wasmhal/issues)
 
 ---
 
