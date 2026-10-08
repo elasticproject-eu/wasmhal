@@ -1,0 +1,19 @@
+[package]
+name = "perf-guest"
+version = "0.1.0"
+edition = "2021"
+description = "WASM guest component that benchmarks the ELASTIC HAL use-case worlds from inside Wasm"
+publish = false
+
+[dependencies]
+wit-bindgen = "0.41"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = 3
+lto = true
+
+# Standalone crate: built for wasm32-wasip2, not part of the host build.
+[workspace]
