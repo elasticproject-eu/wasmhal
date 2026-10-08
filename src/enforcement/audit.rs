@@ -2,6 +2,7 @@
 
 use super::EntityId;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
@@ -45,21 +46,21 @@ impl AuditEvent {
 
 /// Audit log storage and management
 pub struct AuditLog {
-    events: Arc<RwLock<Vec<AuditEvent>>>,
+    events: Arc<RwLock<VecDeque<AuditEvent>>>,
     max_events: usize,
 }
 
 impl AuditLog {
     pub fn new() -> Self {
         Self {
-            events: Arc::new(RwLock::new(Vec::new())),
+            events: Arc::new(RwLock::new(VecDeque::new())),
             max_events: 10_000, // Keep last 10k events
         }
     }
 
     pub fn with_capacity(max_events: usize) -> Self {
         Self {
-            events: Arc::new(RwLock::new(Vec::with_capacity(max_events))),
+            events: Arc::new(RwLock::new(VecDeque::with_capacity(max_events))),
             max_events,
         }
     }
@@ -67,18 +68,17 @@ impl AuditLog {
     /// Log an audit event
     pub fn log(&self, event: AuditEvent) {
         let mut events = self.events.write().unwrap();
-        events.push(event);
+        events.push_back(event);
 
-        // Trim old events if we exceed max
-        if events.len() > self.max_events {
-            let drain_count = events.len() - self.max_events;
-            events.drain(0..drain_count);
+        // Trim old events if we exceed max (O(1) per event with a ring buffer)
+        while events.len() > self.max_events {
+            events.pop_front();
         }
     }
 
     /// Get all events
     pub fn get_events(&self) -> Vec<AuditEvent> {
-        self.events.read().unwrap().clone()
+        self.events.read().unwrap().iter().cloned().collect()
     }
 
     /// Get events for a specific entity
@@ -137,5 +137,24 @@ impl Clone for AuditLog {
             events: Arc::clone(&self.events),
             max_events: self.max_events,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_audit_log_keeps_most_recent_events() {
+        let log = AuditLog::with_capacity(3);
+        for i in 0..5 {
+            log.log(AuditEvent::new(
+                EntityId::new("e"),
+                "crypto",
+                format!("op{i}"),
+            ));
+        }
+        let ops: Vec<_> = log.get_events().into_iter().map(|e| e.operation).collect();
+        assert_eq!(ops, ["op2", "op3", "op4"]);
     }
 }
