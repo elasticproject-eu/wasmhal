@@ -6,7 +6,7 @@ Thanks for your interest in contributing! This project is developed within the E
 
 - Use [GitHub Issues](https://github.com/elasticproject-eu/wasmhal/issues) for bugs and feature requests.
 - For bugs, include the platform (AMD SEV-SNP, Intel TDX or non-TEE), the Rust version, the steps to reproduce and the observed output.
-- **Security vulnerabilities:** please do not open a public issue. Report them privately via [GitHub security advisories](https://github.com/elasticproject-eu/wasmhal/security/advisories/new).
+- **Security vulnerabilities:** please do not open a public issue. See [SECURITY.md](SECURITY.md).
 
 ## Making changes
 
@@ -21,7 +21,7 @@ Thanks for your interest in contributing! This project is developed within the E
    cargo test
    ```
 
-   Tests that need TEE hardware are marked `#[ignore]`; run them with `cargo test -- --ignored` on a matching platform if your change touches platform code.
+   The TDX integration tests need TDX hardware and are marked `#[ignore]`. Run them with `cargo test -- --ignored` on a TDX guest if your change touches platform code. `test_platform_integration` also needs a TEE, so it fails on ordinary machines.
 5. Add or update tests and documentation for any change in behaviour.
 6. Open a pull request against `main` with a short description of what changed and why.
 
@@ -31,7 +31,7 @@ Use short, descriptive messages in the imperative mood, optionally with a [Conve
 
 ## Code of conduct
 
-Be respectful and constructive. Harassment or abusive behaviour is not tolerated. Maintainers may remove comments, commits or contributors that do not follow this.
+This project follows the [Code of Conduct](CODE_OF_CONDUCT.md), which is based on the Contributor Covenant 2.1. Please report unacceptable behaviour privately to the maintainers, as described there.
 
 ## Licence
 

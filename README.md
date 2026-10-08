@@ -30,11 +30,12 @@ The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interf
 
 ### Security Features
 
-- **Hardware Attestation** - Platform attestation report generation and verification
-- **Encrypted Storage** - All data at rest encrypted with platform-derived keys
-- **Secure Boot** - TEE secure boot verification and measurement
-- **Memory Protection** - TEE-aware memory allocation and protection
-- **Network Security** - TLS/DTLS with certificate management and validation
+- **Hardware attestation:** generates SEV-SNP reports and TDX quotes through the Linux TSM interface, with a caller-supplied nonce bound into the report data. The relying party verifies the evidence.
+- **Memory protection:** comes from the TEE itself. AMD SEV-SNP and Intel TDX encrypt and integrity-protect guest memory against the host.
+- **Encrypted storage:** opt-in encrypted containers (AES-256-GCM, with keys generated per container).
+- **Workload isolation:** the Wasm sandbox, plus composable WIT worlds, so each workload gets only the interfaces it needs.
+- **Capability enforcement:** per-entity capabilities, rate limits and an audit log (`src/enforcement/`).
+- **TLS:** client and server connections through rustls.
 
 ### Platform Support
 
@@ -49,19 +50,21 @@ The ELASTIC TEE HAL (Hardware Abstraction Layer) provides a comprehensive interf
 
 ## Requirements
 
-- **Rust 2021 Edition** or later
-- **WASI 0.2** compatible runtime (Wasmtime recommended)
-- **TEE Platform** - AMD SEV-SNP or Intel TDX
-- **GPU** (optional) - For compute acceleration features
+- **Rust** (stable, 2021 edition), with the `wasm32-wasip2` target for building Wasm components (`rustup target add wasm32-wasip2`).
+- **System packages** for the TPM support used on Azure confidential VMs: `pkg-config` and `libtss2-dev` (Debian/Ubuntu: `sudo apt-get install -y build-essential pkg-config libtss2-dev`).
+- **A Confidential VM**, AMD SEV-SNP or Intel TDX, for attestation. Everything else also runs on ordinary Linux machines. See [Deployment](#deployment).
+- **A GPU** (optional), for the compute features.
 
 ## Installation
 
-Add to your `Cargo.toml`:
+The crate is not published on crates.io. Add it as a git dependency in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-elastic-tee-hal = "0.1.0"
+elastic-tee-hal = { git = "https://github.com/elasticproject-eu/wasmhal" }
 ```
+
+To run Wasm components with the HAL linked in, use the `hal-runtime` crate in [`hal-runtime/`](hal-runtime/). It is a Wasmtime host library plus a `hal-runtime` command-line tool.
 
 ## Quick Start
 
@@ -469,35 +472,109 @@ cargo test communication::tests
 cargo test --features gpu
 ```
 
+## Deployment
+
+### Tested environments
+
+| Platform | Environment | Status |
+| --- | --- | --- |
+| AMD SEV-SNP | GCP `n2d-standard-8` Confidential VM, Ubuntu 24.04, Linux 7.0 | Tested, including attestation |
+| Intel TDX | GCP `c3-standard-8` Confidential VM, Ubuntu 24.04, Linux 7.0 | Tested, including attestation |
+| AMD SEV-SNP (Azure) | Confidential VM with a paravisor (attestation through the vTPM) | Supported by platform detection |
+| Non-TEE Linux (x86-64) | Any | Everything except attestation |
+
+### What the guest needs for attestation
+
+- **Linux 6.7 or later** with the TSM report interface (`CONFIG_TSM_REPORTS`), and configfs mounted at `/sys/kernel/config`. Ubuntu 24.04 on GCP provides both.
+- **The TEE guest device:** `/dev/sev-guest` (SEV-SNP) or `/dev/tdx_guest` (TDX).
+- **Root privileges** for the process that requests reports, because the configfs entries are root-owned.
+
+You can check all three with:
+
+```bash
+sudo dmesg | grep -i 'Memory Encryption'     # "AMD SEV SEV-ES SEV-SNP" or "Intel TDX"
+ls -l /dev/sev-guest /dev/tdx_guest          # one of them must exist
+ls /sys/kernel/config/tsm/report             # TSM configfs is available
+```
+
+On GCP, such a VM is created with, for example:
+
+```bash
+gcloud compute instances create my-tdx-vm --zone us-central1-a \
+  --machine-type c3-standard-8 --confidential-compute-type TDX \
+  --maintenance-policy TERMINATE \
+  --image-family ubuntu-2404-lts-amd64 --image-project ubuntu-os-cloud
+```
+
+For SEV-SNP, use `--machine-type n2d-standard-8 --confidential-compute-type SEV_SNP`.
+
+### Running a component
+
+```bash
+cd hal-runtime
+cargo build --release
+sudo ./target/release/hal-runtime path/to/component.wasm      # add -v for debug logging
+```
+
+The component must implement the `hal-consumer` world (`hal-runtime/wit/`), which exports `run`.
+
+**Runtime settings:**
+- `hal-runtime` stores storage-interface data under `/tmp/hal-storage`.
+- Each open socket uses a file descriptor, so raise `ulimit -n` for workloads with many connections.
+
+See [SECURITY.md](SECURITY.md) for deployment security guidelines.
+
+## Troubleshooting and debugging
+
+### Logging
+
+The library logs through the [`log`](https://docs.rs/log) crate. Your application has to install a logger to see the output, for example `env_logger::init()`. Then choose the level with `RUST_LOG`:
+
+```bash
+RUST_LOG=elastic_tee_hal=debug cargo run              # HAL debug output
+RUST_LOG=debug ./target/release/hal-runtime app.wasm  # everything
+./target/release/hal-runtime -v app.wasm              # same as debug level
+```
+
+At debug level, platform detection logs each check it makes (CPU vendor, device nodes, TSM configfs, vTPM). That is usually the fastest way to see why a TEE was not detected.
+
+### Common problems
+
+| Symptom | Cause and fix |
+| --- | --- |
+| The build fails in `tss-esapi-sys` or reports that `tss2-sys`/`pkg-config` was not found | Install `pkg-config` and `libtss2-dev`. |
+| `No supported TEE platform detected` | The process doesn't see a supported TEE. Run the three checks under [Deployment](#what-the-guest-needs-for-attestation), then look at the detection output with `RUST_LOG=debug`. On a non-TEE machine this error is expected. |
+| `TSM configfs not available at /sys/kernel/config/tsm/report` | The kernel is older than 6.7, was built without `CONFIG_TSM_REPORTS`, or configfs isn't mounted (`sudo mount -t configfs none /sys/kernel/config`). |
+| Attestation fails with `Permission denied` | Requesting reports through the configfs needs root. Run the host process with `sudo`. |
+| `Too many open files` | Sockets weren't closed, or `ulimit -n` is too low for the workload. Close sockets with `sockets::close`, or raise the limit. |
+| `test_platform_integration` fails | It needs TEE hardware. Run it on a Confidential VM. The TDX integration tests are `#[ignore]`d. Run them with `cargo test -- --ignored` on a TDX guest, with `ITA_API_KEY` set. |
+
+### Debugging tests and examples
+
+```bash
+cargo test -- --nocapture              # show test output
+RUST_LOG=debug cargo test <name> -- --nocapture
+cargo run --release --example perf     # micro-benchmarks, see PERFORMANCE.md
+```
+
 ## Performance
 
-The HAL is designed for high-performance confidential computing:
+Measured on GCP Confidential VMs (AMD SEV-SNP and Intel TDX):
 
-- **Zero-copy operations** where possible
-- **Async/await** throughout for non-blocking I/O
-- **Hardware acceleration** via GPU compute and crypto instructions
-- **Memory pool management** for reduced allocation overhead
-- **Efficient serialization** with bincode for inter-workload communication
+- **HAL calls from a Wasm component** cost about 0.1–0.5 µs more than native calls, plus data copying. That is 1–10 % for crypto, storage and network operations.
+- **Attestation** (nonce plus evidence) takes about 82–96 ms.
+- **Deploying a workload:** compiling a 271 KiB component takes 54–60 ms, and instantiating it takes 63–73 µs.
+- **The enforcement layer** adds about 0.2–0.3 µs per call.
+
+See [PERFORMANCE.md](PERFORMANCE.md) for the full results per WIT world, the method, and how to reproduce them.
 
 ## Security Considerations
 
-### Platform Attestation
+- **Attestation:** the HAL produces attestation evidence: the SNP report or TDX quote, plus the measurements, with the caller's nonce bound into the report data. Verifying the hardware signature and the measurements is up to the relying party.
+- **Isolation:** workloads are isolated by the Wasm sandbox, and can only use the HAL interfaces linked into their WIT world. The enforcement layer adds per-entity capabilities, rate limits and auditing.
+- **What the TEE protects:** guest memory. Storage and network I/O leave the guest, so use encrypted storage containers and application-layer encryption for sensitive data.
 
-- All cryptographic operations can include platform measurements
-- Remote attestation supported via platform-specific mechanisms
-- Hardware-rooted trust chain validation
-
-### Memory Protection
-
-- All sensitive data encrypted in memory when possible
-- Secure memory allocation patterns for TEE environments
-- Stack and heap protection via platform features
-
-### Network Security
-
-- TLS 1.3 minimum for all network communications
-- Certificate pinning and validation
-- Perfect forward secrecy for all connections
+See [SECURITY.md](SECURITY.md) for the security model, deployment guidelines, and how to report vulnerabilities.
 
 ## API Documentation
 
@@ -533,7 +610,7 @@ pub struct PlatformCapabilities {
 
 ## Contributing
 
-We welcome contributions! In short: open an issue first for larger changes, work on a branch, make sure `cargo fmt`, `cargo clippy` and `cargo test` pass, and open a pull request against `main`. See the [Contributing Guide](CONTRIBUTING.md) for details.
+We welcome contributions! In short: open an issue first for larger changes, work on a branch, make sure `cargo fmt`, `cargo clippy` and `cargo test` pass, and open a pull request against `main`. See the [Contributing Guide](CONTRIBUTING.md) for details. Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ### Development Setup
 
@@ -542,8 +619,9 @@ We welcome contributions! In short: open an issue first for larger changes, work
 git clone https://github.com/elasticproject-eu/wasmhal.git
 cd wasmhal
 
-# Install Rust toolchain
-rustup target add wasm32-wasi
+# Install the build dependencies and Wasm targets
+sudo apt-get install -y build-essential pkg-config libtss2-dev
+rustup target add wasm32-wasip1 wasm32-wasip2
 
 # Build the project
 cargo build
@@ -574,6 +652,7 @@ This work has been partially supported by the [ELASTIC project](https://elasticp
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/elasticproject-eu/wasmhal/issues)
+- **Security vulnerabilities**: see [SECURITY.md](SECURITY.md); please don't use public issues.
 
 ---
 
