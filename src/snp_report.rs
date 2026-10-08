@@ -29,23 +29,31 @@
 //! Offsets are into the raw report, little-endian, per the AMD SEV-SNP
 //! Firmware ABI Specification, "Guest Attestation Report" table:
 //!
-//! | Offset | Size | Field           | Notes                              |
-//! |-------:|-----:|-----------------|------------------------------------|
-//! |  0x000 |    4 | VERSION         | 2 = SNP, 3 = SNP + TCB components |
-//! |  0x004 |    4 | GUEST_SVN       |                                    |
-//! |  0x008 |    8 | POLICY          |                                    |
-//! |  0x018 |    8 | CURRENT_TCB     |                                    |
-//! |  0x02C |    8 | FLAGS           |                                    |
-//! |  0x038 |   32 | REPORT_DATA     | verifier nonce                     |
-//! |  0x058 |   48 | MEASUREMENT     | launch digest ("MRTD")             |
-//! |  0x088 |   32 | HOST_DATA       |                                    |
-//! |  0x0A8 |   64 | ID_KEY_DIGEST   |                                    |
-//! |  0x0E8 |   64 | AUTHOR_KEY_DIGEST |                                  |
-//! |  0x128 |   32 | REPORT_ID       |                                    |
-//! |  0x148 |   64 | REPORT_ID_MA    |                                    |
-//! |  0x188 |    8 | REPORTED_TCB    |                                    |
-//! |  0x1A0 |    4 | CPU_SOCKETS     |                                    |
-//! |  0x3C0 |  512 | SIGNATURE       | ECDSA P-384 over everything above  |
+//! | Offset | Size | Field             | Notes                              |
+//! |-------:|-----:|-------------------|------------------------------------|
+//! |  0x000 |    4 | VERSION           | 2–5 (see `KNOWN_VERSIONS`)         |
+//! |  0x004 |    4 | GUEST_SVN         |                                    |
+//! |  0x008 |    8 | POLICY            |                                    |
+//! |  0x010 |   16 | FAMILY_ID         |                                    |
+//! |  0x020 |   16 | IMAGE_ID          |                                    |
+//! |  0x030 |    4 | VMPL              |                                    |
+//! |  0x034 |    4 | SIGNATURE_ALGO    |                                    |
+//! |  0x038 |    8 | CURRENT_TCB       |                                    |
+//! |  0x040 |    8 | PLATFORM_INFO     |                                    |
+//! |  0x048 |    4 | FLAGS             | AUTHOR_KEY_EN, MASK_CHIP_KEY, …    |
+//! |  0x050 |   64 | REPORT_DATA       | verifier nonce                     |
+//! |  0x090 |   48 | MEASUREMENT       | launch digest ("MRTD")             |
+//! |  0x0C0 |   32 | HOST_DATA         |                                    |
+//! |  0x0E0 |   48 | ID_KEY_DIGEST     |                                    |
+//! |  0x110 |   48 | AUTHOR_KEY_DIGEST |                                    |
+//! |  0x140 |   32 | REPORT_ID         |                                    |
+//! |  0x160 |   32 | REPORT_ID_MA      |                                    |
+//! |  0x180 |    8 | REPORTED_TCB      |                                    |
+//! |  0x1A0 |   64 | CHIP_ID           |                                    |
+//! |  0x2A0 |  512 | SIGNATURE         | ECDSA P-384 over 0x000–0x29F       |
+//!
+//! Checked against real reports from GCP SEV-SNP guests (version 5): the
+//! nonce written through the TSM `inblob` appears at 0x050.
 //!
 //! Only VERSION, REPORTED_TCB, REPORT_DATA and MEASUREMENT are read here.
 //! Signature verification is a verifier's job: it needs the VCEK certificate
@@ -56,16 +64,16 @@
 pub const MEASUREMENT_LEN: usize = 48;
 
 /// Length of the SNP `REPORT_DATA` field.
-pub const REPORT_DATA_LEN: usize = 32;
+pub const REPORT_DATA_LEN: usize = 64;
 
 /// Offset of VERSION.
 const OFFSET_VERSION: usize = 0x000;
 /// Offset of REPORTED_TCB.
-const OFFSET_REPORTED_TCB: usize = 0x188;
+const OFFSET_REPORTED_TCB: usize = 0x180;
 /// Offset of REPORT_DATA.
-const OFFSET_REPORT_DATA: usize = 0x038;
+const OFFSET_REPORT_DATA: usize = 0x050;
 /// Offset of MEASUREMENT.
-const OFFSET_MEASUREMENT: usize = 0x058;
+const OFFSET_MEASUREMENT: usize = 0x090;
 
 /// The smallest report that can contain everything read here.
 ///
@@ -76,14 +84,16 @@ const MIN_REPORT_LEN: usize = OFFSET_REPORTED_TCB + 8;
 
 /// The SNP guest report version this parser understands.
 ///
-/// 2 is the base SNP report; 3 adds the TCB components block. Both place the
-/// fields read here at the same offsets, so both are accepted.
-const KNOWN_VERSIONS: [u32; 2] = [2, 3];
+/// 2 is the base SNP report; 3 adds the TCB components block; 4 and 5 add
+/// mitigation-vector and launch-TCB fields in previously reserved space (GCP
+/// SEV-SNP guests return version 5 as of 2026). All of them place the fields
+/// read here at the same offsets and keep the 0x4A0 size, so all are accepted.
+const KNOWN_VERSIONS: [u32; 4] = [2, 3, 4, 5];
 
 /// Fields extracted from a raw SNP attestation report.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SnpReport {
-    /// Report version (2 or 3).
+    /// Report version (one of `KNOWN_VERSIONS`).
     pub version: u32,
     /// The launch measurement, hex-encoded into evidence as `mrtd`.
     pub measurement: [u8; MEASUREMENT_LEN],
@@ -147,19 +157,16 @@ impl SnpReport {
 
     /// Whether the firmware bound `requested` into the report data.
     ///
-    /// Compares the first [`REPORT_DATA_LEN`] bytes of `requested`, zero-padded,
-    /// against what the firmware reports.
-    ///
-    /// Truncating to 32 bytes is not leniency — it is what the hardware does.
-    /// The TSM interface accepts 64 bytes of report data, but SNP's `REPORT_DATA`
-    /// field is only 32 bytes wide, so the firmware binds the leading 32 and
-    /// discards the rest. Callers wanting a full-length binding should send at
-    /// most 32 bytes on SNP; anything beyond that is not covered by the
-    /// signature and this check correctly refuses to claim otherwise.
+    /// `requested` is zero-padded to [`REPORT_DATA_LEN`] (64 bytes), exactly as
+    /// [`crate::attestation::request_report`] pads it before writing `inblob`,
+    /// and must then equal the report's `REPORT_DATA` field byte for byte.
+    /// Longer input can never have been bound and does not match.
     pub fn report_data_matches(&self, requested: &[u8]) -> bool {
-        let bound = requested.len().min(REPORT_DATA_LEN);
+        if requested.len() > REPORT_DATA_LEN {
+            return false;
+        }
         let mut want = [0u8; REPORT_DATA_LEN];
-        want[..bound].copy_from_slice(&requested[..bound]);
+        want[..requested.len()].copy_from_slice(requested);
         self.report_data == want
     }
 
@@ -206,7 +213,7 @@ mod tests {
 
     #[test]
     fn parse_accepts_known_versions() {
-        for version in [2u32, 3u32] {
+        for version in KNOWN_VERSIONS {
             let report = synthetic_report(version, MIN_REPORT_LEN);
             let parsed = SnpReport::parse(&report).unwrap();
             assert_eq!(parsed.version, version);
@@ -224,23 +231,32 @@ mod tests {
     }
 
     #[test]
-    fn report_data_matches_the_leading_32_bytes_the_hardware_binds() {
+    fn report_data_matches_the_full_64_byte_field() {
         let report = synthetic_report(2, MIN_REPORT_LEN);
         let parsed = SnpReport::parse(&report).unwrap();
 
-        // The synthetic report is 0xCD in all 32 bytes.
-        assert!(parsed.report_data_matches(&[0xCD; 32]));
-        assert!(parsed.report_data_matches(&[0xCD; 33]));
+        // The synthetic report is 0xCD in all 64 bytes.
         assert!(parsed.report_data_matches(&[0xCD; 64]));
 
         // A shorter nonce is zero-padded by the requester, so its padding is
         // zero and cannot match an all-0xCD field.
-        assert!(!parsed.report_data_matches(&[0xCD; 8]));
-        assert!(!parsed.report_data_matches(&[0xCD; 31]));
+        assert!(!parsed.report_data_matches(&[0xCD; 32]));
+        assert!(!parsed.report_data_matches(&[0xCD; 63]));
+        assert!(!parsed.report_data_matches(&[0xCD; 65]));
 
         // Any other nonce must not match — this is the freshness check.
-        assert!(!parsed.report_data_matches(&[0x00; 32]));
-        assert!(!parsed.report_data_matches(&[0xCE; 32]));
+        assert!(!parsed.report_data_matches(&[0x00; 64]));
+        assert!(!parsed.report_data_matches(&[0xCE; 64]));
+    }
+
+    #[test]
+    fn parse_reads_report_data_after_tcb_and_platform_info() {
+        // Regression: the fields before REPORT_DATA (CURRENT_TCB at 0x38,
+        // PLATFORM_INFO at 0x40) must not leak into the parsed nonce.
+        let mut report = synthetic_report(5, 0x4A0);
+        report[0x38..0x50].fill(0xEE);
+        let parsed = SnpReport::parse(&report).unwrap();
+        assert_eq!(parsed.report_data, [0xCD; REPORT_DATA_LEN]);
     }
 
     #[test]
