@@ -13,6 +13,8 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
 
 mod host_impl;
 pub use host_impl::HalHost;
+/// Host-side mirrors of WIT types, for calling `HalHost` directly.
+pub use host_impl::{Address, AllocationRequest, CipherAlgorithm, HashAlgorithm, Protocol, ResourceType};
 
 mod wit_impl;
 
@@ -58,6 +60,11 @@ impl HalRuntime {
         Ok(Self { engine })
     }
 
+    /// The underlying Wasmtime engine
+    pub fn engine(&self) -> &Engine {
+        &self.engine
+    }
+
     /// Load and instantiate a WASM component
     pub async fn load_component(&self, wasm_path: PathBuf) -> Result<Component> {
         let component = Component::from_file(&self.engine, &wasm_path)
@@ -76,10 +83,13 @@ impl HalRuntime {
 
     /// Create a new store with HAL host implementation
     pub fn create_store(&self) -> Result<Store<RuntimeState>> {
+        self.create_store_with_host(HalHost::new()?)
+    }
+
+    /// Create a store backed by a caller-provided HAL host
+    pub fn create_store_with_host(&self, hal: HalHost) -> Result<Store<RuntimeState>> {
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_env().build();
         let table = wasmtime::component::ResourceTable::new();
-
-        let hal = HalHost::new()?;
 
         let state = RuntimeState { wasi, table, hal };
 

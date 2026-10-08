@@ -19,7 +19,20 @@ use elastic_tee_hal::{
     storage::StorageInterface as HalStorage,
     ElasticTeeHal, PlatformCapabilities,
 };
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
+
+/// Run a HAL future to completion from a synchronous host function.
+///
+/// Host calls execute inside a Tokio task. Tokio's cooperative budget makes
+/// `tokio::sync` primitives return `Pending` once a task has used up its
+/// budget, expecting the task to yield; a nested `block_on` never yields, so
+/// after ~128 HAL calls in one guest invocation it would spin forever.
+/// `unconstrained` opts the nested future out of that budget.
+fn block_on<F: std::future::Future>(f: F) -> F::Output {
+    futures::executor::block_on(tokio::task::unconstrained(f))
+}
 
 /// Host-side HAL implementation that WASM components call into.
 /// Covers all 11 WIT interfaces: platform, capabilities, crypto, storage,
@@ -42,16 +55,28 @@ pub struct HalHost {
     communication: HalComm,
     // Internal counter for generating handles
     next_handle: AtomicU64,
+    // Guest socket handle -> HalSockets handle of the bound listener or
+    // connected stream behind it
+    socket_backing: Mutex<HashMap<u64, u64>>,
 }
 
 impl HalHost {
     pub fn new() -> Result<Self> {
         // Auto-detect the TEE platform (TDX on GCP, SEV-SNP on AWS, etc.)
-        let platform = ElasticTeeHal::new()?;
-        let capabilities = futures::executor::block_on(platform.capabilities());
+        Self::from_platform(ElasticTeeHal::new()?)
+    }
+
+    /// Create a host for an explicit platform type, skipping detection.
+    /// Intended for development and benchmarking on non-TEE machines.
+    pub fn with_platform(platform_type: elastic_tee_hal::platform::PlatformType) -> Result<Self> {
+        Self::from_platform(ElasticTeeHal::with_platform(platform_type)?)
+    }
+
+    fn from_platform(platform: ElasticTeeHal) -> Result<Self> {
+        let capabilities = block_on(platform.capabilities());
 
         let storage =
-            futures::executor::block_on(async { HalStorage::new("/tmp/hal-storage").await.ok() });
+            block_on(async { HalStorage::new("/tmp/hal-storage").await.ok() });
 
         let resources = HalResources::new().ok();
 
@@ -68,6 +93,7 @@ impl HalHost {
             events: HalEvents::new(),
             communication: HalComm::new(),
             next_handle: AtomicU64::new(1),
+            socket_backing: Mutex::new(HashMap::new()),
         })
     }
 
@@ -75,12 +101,30 @@ impl HalHost {
         self.next_handle.fetch_add(1, Ordering::SeqCst)
     }
 
+    /// Attach a listener or stream to a guest socket handle, closing whatever
+    /// was attached before so repeated bind/connect calls do not leak.
+    fn attach_socket(&self, socket: u64, backing: u64) {
+        let old = self.socket_backing.lock().unwrap().insert(socket, backing);
+        if let Some(old) = old {
+            let _ = block_on(self.sockets.close_socket(old));
+        }
+    }
+
+    fn backing_socket(&self, socket: u64) -> Result<u64, String> {
+        self.socket_backing
+            .lock()
+            .unwrap()
+            .get(&socket)
+            .copied()
+            .ok_or_else(|| format!("Socket {socket} is not bound or connected"))
+    }
+
     // ========================================================================
     // 1. PLATFORM INTERFACE  (attestation, platform-info)
     // ========================================================================
 
     pub fn attestation(&mut self, report_data: Vec<u8>) -> Result<Vec<u8>, String> {
-        futures::executor::block_on(self.platform.attest(&report_data)).map_err(|e| e.to_string())
+        block_on(self.platform.attest(&report_data)).map_err(|e| e.to_string())
     }
 
     pub fn platform_info(&self) -> PlatformInfo {
@@ -170,7 +214,7 @@ impl HalHost {
             HashAlgorithm::Sha512 => "SHA-512",
             HashAlgorithm::Blake3 => "SHA-384", // map to available impl
         };
-        futures::executor::block_on(self.crypto.hash_data(algo, data)).map_err(|e| e.to_string())
+        block_on(self.crypto.hash_data(algo, data)).map_err(|e| e.to_string())
     }
 
     pub fn crypto_encrypt(
@@ -183,7 +227,7 @@ impl HalHost {
             CipherAlgorithm::Aes256Gcm => "AES-256-GCM",
             CipherAlgorithm::ChaCha20Poly1305 => "ChaCha20-Poly1305",
         };
-        futures::executor::block_on(self.crypto.symmetric_encrypt(algo, key, data, None))
+        block_on(self.crypto.symmetric_encrypt(algo, key, data, None))
             .map_err(|e| e.to_string())
     }
 
@@ -197,7 +241,7 @@ impl HalHost {
             CipherAlgorithm::Aes256Gcm => "AES-256-GCM",
             CipherAlgorithm::ChaCha20Poly1305 => "ChaCha20-Poly1305",
         };
-        futures::executor::block_on(self.crypto.symmetric_decrypt(algo, key, data, None))
+        block_on(self.crypto.symmetric_decrypt(algo, key, data, None))
             .map_err(|e| e.to_string())
     }
 
@@ -209,12 +253,12 @@ impl HalHost {
             .map_err(|e| e.to_string())?;
         // Load a signing context to extract the public key
         let ctx =
-            futures::executor::block_on(self.crypto.load_key_context("Ed25519", &seed, "signing"))
+            block_on(self.crypto.load_key_context("Ed25519", &seed, "signing"))
                 .map_err(|e| e.to_string())?;
         // Sign empty data to confirm context works; public key is derived from seed
         // For Ed25519, public key is the last 32 bytes of the 64-byte expanded key
         // We return the seed as private_key so the caller can reconstruct
-        let _ = futures::executor::block_on(self.crypto.sign_data(ctx, b"test"))
+        let _ = block_on(self.crypto.sign_data(ctx, b"test"))
             .map_err(|e| e.to_string())?;
         Ok(KeyPair {
             public_key: seed[..32].to_vec(), // placeholder; real key derivation in crypto module
@@ -223,13 +267,13 @@ impl HalHost {
     }
 
     pub fn crypto_sign(&self, data: &[u8], private_key: &[u8]) -> Result<Vec<u8>, String> {
-        let ctx = futures::executor::block_on(self.crypto.load_key_context(
+        let ctx = block_on(self.crypto.load_key_context(
             "Ed25519",
             private_key,
             "signing",
         ))
         .map_err(|e| e.to_string())?;
-        let sig = futures::executor::block_on(self.crypto.sign_data(ctx, data))
+        let sig = block_on(self.crypto.sign_data(ctx, data))
             .map_err(|e| e.to_string())?;
         Ok(sig.signature)
     }
@@ -240,7 +284,7 @@ impl HalHost {
         signature: &[u8],
         public_key: &[u8],
     ) -> Result<bool, String> {
-        futures::executor::block_on(
+        block_on(
             self.crypto
                 .verify_signature("Ed25519", public_key, data, signature),
         )
@@ -268,17 +312,17 @@ impl HalHost {
     }
 
     pub fn storage_create_container(&self, name: &str) -> Result<u64, String> {
-        futures::executor::block_on(self.storage()?.open_container(name, false))
+        block_on(self.storage()?.open_container(name, false))
             .map_err(|e| e.to_string())
     }
 
     pub fn storage_open_container(&self, name: &str) -> Result<u64, String> {
-        futures::executor::block_on(self.storage()?.open_container(name, false))
+        block_on(self.storage()?.open_container(name, false))
             .map_err(|e| e.to_string())
     }
 
     pub fn storage_delete_container(&self, handle: u64) -> Result<(), String> {
-        futures::executor::block_on(self.storage()?.close_container(handle))
+        block_on(self.storage()?.close_container(handle))
             .map_err(|e| e.to_string())
     }
 
@@ -288,23 +332,23 @@ impl HalHost {
         key: &str,
         data: &[u8],
     ) -> Result<u64, String> {
-        futures::executor::block_on(self.storage()?.write_object(container, key, data))
+        block_on(self.storage()?.write_object(container, key, data))
             .map_err(|e| e.to_string())?;
         Ok(self.next_id()) // return object handle
     }
 
     pub fn storage_retrieve_object(&self, container: u64, key: &str) -> Result<Vec<u8>, String> {
-        futures::executor::block_on(self.storage()?.read_object(container, key))
+        block_on(self.storage()?.read_object(container, key))
             .map_err(|e| e.to_string())
     }
 
     pub fn storage_delete_object(&self, container: u64, key: &str) -> Result<(), String> {
-        futures::executor::block_on(self.storage()?.delete_object(container, key))
+        block_on(self.storage()?.delete_object(container, key))
             .map_err(|e| e.to_string())
     }
 
     pub fn storage_list_objects(&self, container: u64) -> Result<Vec<String>, String> {
-        futures::executor::block_on(self.storage()?.list_objects(container))
+        block_on(self.storage()?.list_objects(container))
             .map_err(|e| e.to_string())
     }
 
@@ -339,16 +383,13 @@ impl HalHost {
         }
     }
 
-    pub fn sockets_bind(&self, _socket: u64, addr: &Address) -> Result<(), String> {
+    pub fn sockets_bind(&self, socket: u64, addr: &Address) -> Result<(), String> {
         let bind_addr = format!("{}:{}", addr.ip, addr.port);
         // For TCP, create listener; for UDP, bind socket
-        futures::executor::block_on(async {
-            self.sockets
-                .create_tcp_socket(&bind_addr)
-                .await
-                .map_err(|e| e.to_string())?;
-            Ok::<(), String>(())
-        })
+        let listener = block_on(self.sockets.create_tcp_socket(&bind_addr))
+            .map_err(|e| e.to_string())?;
+        self.attach_socket(socket, listener);
+        Ok(())
     }
 
     pub fn sockets_listen(&self, _socket: u64, _backlog: u32) -> Result<(), String> {
@@ -356,32 +397,43 @@ impl HalHost {
         Ok(())
     }
 
-    pub fn sockets_connect(&self, _socket: u64, addr: &Address) -> Result<u64, String> {
+    pub fn sockets_connect(&self, socket: u64, addr: &Address) -> Result<(), String> {
         let server_addr = format!("{}:{}", addr.ip, addr.port);
-        futures::executor::block_on(self.sockets.tcp_connect(&server_addr))
-            .map_err(|e| e.to_string())
+        let stream = block_on(self.sockets.tcp_connect(&server_addr))
+            .map_err(|e| e.to_string())?;
+        self.attach_socket(socket, stream);
+        Ok(())
     }
 
     pub fn sockets_accept(&self, listener: u64) -> Result<u64, String> {
-        futures::executor::block_on(self.sockets.tcp_accept(listener)).map_err(|e| e.to_string())
+        let listener = self.backing_socket(listener)?;
+        let stream = block_on(self.sockets.tcp_accept(listener)).map_err(|e| e.to_string())?;
+        let socket = self.next_id();
+        self.attach_socket(socket, stream);
+        Ok(socket)
     }
 
     pub fn sockets_send(&self, socket: u64, data: &[u8]) -> Result<u32, String> {
-        futures::executor::block_on(self.sockets.socket_write(socket, data))
+        let socket = self.backing_socket(socket)?;
+        block_on(self.sockets.socket_write(socket, data))
             .map(|r| r.bytes_transferred as u32)
             .map_err(|e| e.to_string())
     }
 
     pub fn sockets_receive(&self, socket: u64, max_len: u32) -> Result<Vec<u8>, String> {
+        let socket = self.backing_socket(socket)?;
         let mut buf = vec![0u8; max_len as usize];
-        let result = futures::executor::block_on(self.sockets.socket_read(socket, &mut buf))
+        let result = block_on(self.sockets.socket_read(socket, &mut buf))
             .map_err(|e| e.to_string())?;
         buf.truncate(result.bytes_transferred);
         Ok(buf)
     }
 
     pub fn sockets_close(&self, socket: u64) -> Result<(), String> {
-        futures::executor::block_on(self.sockets.close_socket(socket)).map_err(|e| e.to_string())
+        match self.socket_backing.lock().unwrap().remove(&socket) {
+            Some(backing) => block_on(self.sockets.close_socket(backing)).map_err(|e| e.to_string()),
+            None => Ok(()),
+        }
     }
 
     // ========================================================================
@@ -391,11 +443,11 @@ impl HalHost {
     // ========================================================================
 
     pub fn gpu_list_adapters(&self) -> Result<Vec<u64>, String> {
-        futures::executor::block_on(self.gpu.get_gpu_adapters()).map_err(|e| e.to_string())
+        block_on(self.gpu.get_gpu_adapters()).map_err(|e| e.to_string())
     }
 
     pub fn gpu_get_adapter_info(&self, handle: u64) -> Result<AdapterInfo, String> {
-        let info = futures::executor::block_on(self.gpu.get_gpu_adapter_info(handle))
+        let info = block_on(self.gpu.get_gpu_adapter_info(handle))
             .map_err(|e| e.to_string())?;
         Ok(AdapterInfo {
             name: info.name,
@@ -405,7 +457,7 @@ impl HalHost {
     }
 
     pub fn gpu_create_device(&self, adapter: u64) -> Result<u64, String> {
-        futures::executor::block_on(self.gpu.create_gpu_device(adapter)).map_err(|e| e.to_string())
+        block_on(self.gpu.create_gpu_device(adapter)).map_err(|e| e.to_string())
     }
 
     pub fn gpu_create_buffer(
@@ -431,17 +483,17 @@ impl HalHost {
             usage,
             mapped_at_creation: false,
         };
-        futures::executor::block_on(self.gpu.create_gpu_buffer(device, &desc))
+        block_on(self.gpu.create_gpu_buffer(device, &desc))
             .map_err(|e| e.to_string())
     }
 
     pub fn gpu_write_buffer(&self, buffer: u64, offset: u64, data: &[u8]) -> Result<(), String> {
-        futures::executor::block_on(self.gpu.write_gpu_buffer(buffer, offset, data))
+        block_on(self.gpu.write_gpu_buffer(buffer, offset, data))
             .map_err(|e| e.to_string())
     }
 
     pub fn gpu_read_buffer(&self, buffer: u64, offset: u64, size: u64) -> Result<Vec<u8>, String> {
-        futures::executor::block_on(self.gpu.read_gpu_buffer(buffer, offset, size))
+        block_on(self.gpu.read_gpu_buffer(buffer, offset, size))
             .map_err(|e| e.to_string())
     }
 
@@ -450,7 +502,7 @@ impl HalHost {
         device: u64,
         shader_code: &[u8],
     ) -> Result<u64, String> {
-        futures::executor::block_on(self.gpu.create_gpu_compute_pipeline(
+        block_on(self.gpu.create_gpu_compute_pipeline(
             device,
             shader_code,
             "main",
@@ -460,7 +512,7 @@ impl HalHost {
     }
 
     pub fn gpu_dispatch(&self, pipeline: u64, x: u32, y: u32, z: u32) -> Result<(), String> {
-        futures::executor::block_on(self.gpu.dispatch_compute(pipeline, x, y, z))
+        block_on(self.gpu.dispatch_compute(pipeline, x, y, z))
             .map_err(|e| e.to_string())
     }
 
@@ -496,7 +548,7 @@ impl HalHost {
             },
             timeout_seconds: None,
         };
-        let result = futures::executor::block_on(self.resources()?.allocate_resource(hal_request))
+        let result = block_on(self.resources()?.allocate_resource(hal_request))
             .map_err(|e| e.to_string())?;
         Ok(AllocationResponse {
             allocation_id: result.allocation_id,
@@ -505,14 +557,14 @@ impl HalHost {
     }
 
     pub fn resources_deallocate(&self, id: &str) -> Result<(), String> {
-        futures::executor::block_on(self.resources()?.release_resource(id))
+        block_on(self.resources()?.release_resource(id))
             .map_err(|e| e.to_string())
     }
 
     pub fn resources_query_available(&self, resource_type: ResourceType) -> Result<u64, String> {
-        let limits = futures::executor::block_on(self.resources()?.get_system_limits())
+        let limits = block_on(self.resources()?.get_system_limits())
             .map_err(|e| e.to_string())?;
-        let usage = futures::executor::block_on(self.resources()?.list_current_allocation())
+        let usage = block_on(self.resources()?.list_current_allocation())
             .map_err(|e| e.to_string())?;
         Ok(match resource_type {
             ResourceType::Memory => limits.max_memory_mb.saturating_sub(usage.memory_mb),
@@ -543,7 +595,7 @@ impl HalHost {
             event_types: vec![type_str.to_string()],
             max_queue_size: 1000,
         };
-        let handler = futures::executor::block_on(self.events.create_event_handler(config))
+        let handler = block_on(self.events.create_event_handler(config))
             .map_err(|e| e.to_string())?;
         let filter = SubscriptionFilter {
             event_types: vec![type_str.to_string()],
@@ -551,18 +603,18 @@ impl HalHost {
             target_pattern: None,
             data_filter: None,
         };
-        futures::executor::block_on(self.events.request_event_subscription(handler, filter))
+        block_on(self.events.request_event_subscription(handler, filter))
             .map_err(|e| e.to_string())
     }
 
     pub fn events_unsubscribe(&self, handle: u64) -> Result<(), String> {
-        futures::executor::block_on(self.events.remove_event_subscription(handle))
+        block_on(self.events.remove_event_subscription(handle))
             .map_err(|e| e.to_string())
     }
 
     pub fn events_poll(&self, handle: u64) -> Result<Vec<EventDataWit>, String> {
         // Try to receive events without blocking
-        match futures::executor::block_on(self.events.request_event_from_handler(handle, Some(0))) {
+        match block_on(self.events.request_event_from_handler(handle, Some(0))) {
             Ok(event) => Ok(vec![EventDataWit {
                 event_type: match event.event_type.as_str() {
                     "platform" => EventType::Platform,
@@ -597,7 +649,7 @@ impl HalHost {
     ) -> Result<u64, String> {
         // Ensure a buffer exists for this channel
         let buffer_name = format!("channel_{}", recipient);
-        let buffer = futures::executor::block_on(self.communication.setup_communication_buffer(
+        let buffer = block_on(self.communication.setup_communication_buffer(
             BufferConfig {
                 name: buffer_name,
                 capacity: 65536,
@@ -612,7 +664,7 @@ impl HalHost {
             Err(_) => {
                 // Buffer may already exist; try to find it
                 let buffers =
-                    futures::executor::block_on(self.communication.list_communication_buffers())
+                    block_on(self.communication.list_communication_buffers())
                         .map_err(|e| e.to_string())?;
                 buffers
                     .first()
@@ -620,7 +672,7 @@ impl HalHost {
                     .handle
             }
         };
-        futures::executor::block_on(self.communication.push_data_to_buffer(
+        block_on(self.communication.push_data_to_buffer(
             buffer_handle,
             data,
             "wasm-guest",
@@ -636,11 +688,11 @@ impl HalHost {
     }
 
     pub fn communication_receive_message(&self) -> Result<Option<Message>, String> {
-        let buffers = futures::executor::block_on(self.communication.list_communication_buffers())
+        let buffers = block_on(self.communication.list_communication_buffers())
             .map_err(|e| e.to_string())?;
 
         for buffer_info in buffers {
-            if let Ok(Some(msg)) = futures::executor::block_on(
+            if let Ok(Some(msg)) = block_on(
                 self.communication
                     .read_data_from_buffer(buffer_info.handle, "wasm-guest"),
             ) {
@@ -657,7 +709,7 @@ impl HalHost {
 
     pub fn communication_list_workloads(&self) -> Result<Vec<String>, String> {
         // Return known workload identifiers from active buffers
-        let buffers = futures::executor::block_on(self.communication.list_communication_buffers())
+        let buffers = block_on(self.communication.list_communication_buffers())
             .map_err(|e| e.to_string())?;
         Ok(buffers
             .iter()
@@ -694,7 +746,7 @@ impl HalHost {
 
     pub fn clock_sleep(&self, duration_ns: u64) -> Result<(), String> {
         let duration = std::time::Duration::from_nanos(duration_ns);
-        futures::executor::block_on(self.clock.sleep(duration)).map_err(|e| e.to_string())
+        block_on(self.clock.sleep(duration)).map_err(|e| e.to_string())
     }
 
     // ========================================================================
@@ -893,4 +945,54 @@ pub struct EntropyInfo {
     pub source: EntropySource,
     pub quality: u32,
     pub available_bytes: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+
+    fn fds() -> usize {
+        std::fs::read_dir("/proc/self/fd").unwrap().count()
+    }
+
+    #[test]
+    fn socket_handle_carries_its_connection() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let _guard = rt.enter();
+        let host = HalHost::with_platform(elastic_tee_hal::platform::PlatformType::AmdSev).unwrap();
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = Address { ip: "127.0.0.1".into(), port: listener.local_addr().unwrap().port() };
+        std::thread::spawn(move || {
+            for mut s in listener.incoming().flatten() {
+                std::thread::spawn(move || {
+                    let mut buf = [0u8; 1024];
+                    while let Ok(n) = s.read(&mut buf) {
+                        if n == 0 || s.write_all(&buf[..n]).is_err() {
+                            break;
+                        }
+                    }
+                });
+            }
+        });
+
+        // Send and receive on the handle the guest got from create-socket.
+        let s = host.sockets_create(Protocol::Tcp).unwrap();
+        host.sockets_connect(s, &addr).unwrap();
+        assert_eq!(host.sockets_send(s, b"ping").unwrap(), 4);
+        assert_eq!(host.sockets_receive(s, 16).unwrap(), b"ping");
+        host.sockets_close(s).unwrap();
+        assert!(host.sockets_send(s, b"x").is_err());
+
+        // Closing releases the connection: no descriptor growth over many cycles.
+        let before = fds();
+        for _ in 0..200 {
+            let s = host.sockets_create(Protocol::Tcp).unwrap();
+            host.sockets_connect(s, &addr).unwrap();
+            host.sockets_close(s).unwrap();
+        }
+        // Allow for the echo threads still finishing their last connections.
+        assert!(fds() < before + 20, "descriptors leaked: {} -> {}", before, fds());
+    }
 }

@@ -239,7 +239,7 @@ impl sockets::Host for RuntimeState {
             ip: addr.ip,
             port: addr.port,
         };
-        self.hal.sockets_connect(socket, &a).map(|_| ())
+        self.hal.sockets_connect(socket, &a)
     }
 
     async fn accept(
