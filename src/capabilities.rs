@@ -75,6 +75,38 @@ impl PlatformCapabilities {
                 // `amd-sev` feature: the Azure vTPM or the TSM firmware path.
                 attestation: crate::platform::ElasticTeeHal::attestation_available(&platform_type),
             },
+            #[cfg(feature = "azure-tdx")]
+            PlatformType::AzureTdxVtpm => CapabilityFeatures {
+                clock: true,
+                random: true,
+                storage: true,
+                secure_storage: true,
+                tcp_sockets: true,
+                udp_sockets: true,
+                tls_support: true,
+                dtls_support: true,
+                gpu_compute: false,
+                dynamic_resources: true,
+                event_handling: true,
+                internal_communication: true,
+                attestation: true,
+            },
+            #[cfg(feature = "azure-snp")]
+            PlatformType::AzureSnpVtpm => CapabilityFeatures {
+                clock: true,
+                random: true,
+                storage: true,
+                secure_storage: true,
+                tcp_sockets: true,
+                udp_sockets: true,
+                tls_support: true,
+                dtls_support: true,
+                gpu_compute: false,
+                dynamic_resources: true,
+                event_handling: true,
+                internal_communication: true,
+                attestation: true,
+            },
             PlatformType::IntelTdx => CapabilityFeatures {
                 clock: true,                  // ✅ Fully implemented with TSC
                 random: true,                 // ✅ Fully implemented with RDRAND/RDSEED

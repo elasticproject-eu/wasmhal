@@ -18,6 +18,12 @@ pub struct ElasticTeeHal {
 pub enum PlatformType {
     AmdSev,
     IntelTdx,
+    /// Azure Confidential VM: Intel TDX + vTPM
+    #[cfg(feature = "azure-tdx")]
+    AzureTdxVtpm,
+    /// Azure Confidential VM: AMD SEV-SNP + vTPM
+    #[cfg(feature = "azure-snp")]
+    AzureSnpVtpm,
     // Future platform support can be added here
 }
 
@@ -64,6 +70,10 @@ impl ElasticTeeHal {
     /// Initialize the HAL with platform-specific setup
     fn initialize(&mut self) -> HalResult<()> {
         match self.platform_type {
+            #[cfg(feature = "azure-tdx")]
+            PlatformType::AzureTdxVtpm => self.init_azure_tdx_vtpm()?,
+            #[cfg(feature = "azure-snp")]
+            PlatformType::AzureSnpVtpm => self.init_azure_snp_vtpm()?,
             PlatformType::AmdSev => self.init_amd_sev()?,
             PlatformType::IntelTdx => self.init_intel_tdx()?,
         }
@@ -90,7 +100,23 @@ impl ElasticTeeHal {
     }
 
     /// Detect the current TEE platform
+    ///
+    /// The Azure vTPM probes run first: an Azure CVM shares CPU/device traits
+    /// with the bare-metal platforms but has none of their evidence sources,
+    /// so the bare-metal checks alone cannot distinguish it.
     fn detect_platform() -> HalResult<PlatformType> {
+        #[cfg(feature = "azure-tdx")]
+        if crate::azure_tdx_vtpm::is_available() {
+            log::info!("Detected Azure TDX CVM");
+            return Ok(PlatformType::AzureTdxVtpm);
+        }
+
+        #[cfg(feature = "azure-snp")]
+        if crate::azure_snp_vtpm::is_available() {
+            log::info!("Detected Azure SNP CVM");
+            return Ok(PlatformType::AzureSnpVtpm);
+        }
+
         // Check for AMD SEV-SNP
         if Self::is_amd_sev_available() {
             return Ok(PlatformType::AmdSev);
@@ -213,6 +239,12 @@ impl ElasticTeeHal {
                     false
                 }
             }
+            // Detect already probed the vTPM HCL report, so an Azure platform
+            // implies attestation is available.
+            #[cfg(feature = "azure-tdx")]
+            PlatformType::AzureTdxVtpm => true,
+            #[cfg(feature = "azure-snp")]
+            PlatformType::AzureSnpVtpm => true,
         }
     }
 
@@ -298,6 +330,22 @@ impl ElasticTeeHal {
         }
     }
 
+    /// Initialize an Azure TDX CVM. The detect probe already validated the
+    /// vTPM HCL report; no further device setup is required.
+    #[cfg(feature = "azure-tdx")]
+    fn init_azure_tdx_vtpm(&self) -> HalResult<()> {
+        log::info!("Initializing Azure TDX + vTPM platform");
+        Ok(())
+    }
+
+    /// Initialize an Azure SEV-SNP CVM. The detect probe already validated the
+    /// vTPM HCL report; no further device setup is required.
+    #[cfg(feature = "azure-snp")]
+    fn init_azure_snp_vtpm(&self) -> HalResult<()> {
+        log::info!("Initializing Azure SNP + vTPM platform");
+        Ok(())
+    }
+
     /// Initialize AMD SEV platform
     fn init_amd_sev(&self) -> HalResult<()> {
         log::info!("Initializing AMD SEV-SNP platform");
@@ -373,7 +421,25 @@ impl ElasticTeeHal {
             ));
         }
 
+        // Azure CVMs have no Linux TSM; the vTPM evidence modules handle them.
+        #[cfg(all(feature = "azure-tdx", target_arch = "x86_64"))]
+        if crate::azure_tdx_vtpm::is_available() {
+            return crate::azure_tdx_vtpm::attest(report_data);
+        }
+        #[cfg(all(feature = "azure-snp", target_arch = "x86_64"))]
+        if crate::azure_snp_vtpm::is_available() {
+            return crate::azure_snp_vtpm::attest(report_data);
+        }
+
         match self.platform_type {
+            #[cfg(feature = "azure-tdx")]
+            PlatformType::AzureTdxVtpm => Err(HalError::TeeInitializationFailed(
+                "Azure TDX vTPM evidence source unavailable".into(),
+            )),
+            #[cfg(feature = "azure-snp")]
+            PlatformType::AzureSnpVtpm => Err(HalError::TeeInitializationFailed(
+                "Azure SNP vTPM evidence source unavailable".into(),
+            )),
             PlatformType::AmdSev => self.amd_sev_attest(report_data).await,
             PlatformType::IntelTdx => self.intel_tdx_attest(report_data).await,
         }

@@ -75,6 +75,8 @@ base64 = "0.22"
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 az-cvm-vtpm = { version = "0.8", optional = true }
 az-snp-vtpm = { version = "0.8", default-features = false, features = ["attester"], optional = true }
+az-tdx-vtpm = { version = "0.8.2", optional = true }
+tss-esapi   = { version = "7.7.0", optional = true }
 
 [features]
 default = ["amd-sev", "intel-tdx"]
@@ -88,6 +90,9 @@ amd-sev = ["dep:az-cvm-vtpm", "dep:az-snp-vtpm"]
 # guest returns `PlatformNotSupported` instead of silently reporting a stub.
 intel-tdx = []
 gpu = ["wgpu"]
+# Azure CVM attestation paths; not enabled by default.
+azure-tdx = ["dep:az-tdx-vtpm", "dep:tss-esapi"]
+azure-snp = ["dep:az-snp-vtpm", "dep:tss-esapi"]
 component = ["wasmtime", "cargo-component"]
 wasmtime = ["dep:wasmtime"]
 
