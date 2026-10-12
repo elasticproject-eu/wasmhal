@@ -1,3 +1,10 @@
+#[cfg(all(feature = "azure-snp", target_arch = "x86_64"))]
+pub mod azure_snp_vtpm;
+#[cfg(all(feature = "azure-tdx", target_arch = "x86_64"))]
+pub mod azure_tdx_vtpm;
+#[cfg(any(feature = "azure-tdx", feature = "azure-snp"))]
+#[cfg(target_arch = "x86_64")]
+pub mod azure_vtpm;
 /// Confidential Computing Elastic TEE HAL - Hardware Abstraction Layer
 /// for Trusted Execution Environments supporting WASI 0.2 specification
 ///
