@@ -115,20 +115,40 @@ impl SocketInterface {
 
     /// Accept incoming TCP connection
     pub async fn tcp_accept(&self, listener_handle: SocketHandle) -> HalResult<SocketHandle> {
+        // Take the listener out of the registry so the accept await does not
+        // hold the registry lock (see known bug 001). Re-insert it afterwards.
+        let listener = {
+            let mut sockets = self.sockets.write().await;
+            match sockets.remove(&listener_handle) {
+                Some(SocketWrapper::TcpListener(l)) => l,
+                Some(other) => {
+                    sockets.insert(listener_handle, other);
+                    return Err(HalError::NotFound("TCP listener not found".to_string()));
+                }
+                None => return Err(HalError::NotFound("TCP listener not found".to_string())),
+            }
+        };
+
+        let accept_result = listener.accept().await;
+        let (stream, _addr) = match accept_result {
+            Ok(v) => v,
+            Err(e) => {
+                let mut sockets = self.sockets.write().await;
+                sockets.insert(listener_handle, SocketWrapper::TcpListener(listener));
+                return Err(HalError::NetworkError(format!(
+                    "Failed to accept connection: {}",
+                    e
+                )));
+            }
+        };
+
+        let handle = self.next_handle.fetch_add(1, Ordering::SeqCst);
+
         let mut sockets = self.sockets.write().await;
+        sockets.insert(listener_handle, SocketWrapper::TcpListener(listener));
+        sockets.insert(handle, SocketWrapper::TcpStream(stream));
 
-        if let Some(SocketWrapper::TcpListener(listener)) = sockets.get_mut(&listener_handle) {
-            let (stream, _addr) = listener.accept().await.map_err(|e| {
-                HalError::NetworkError(format!("Failed to accept connection: {}", e))
-            })?;
-
-            let handle = self.next_handle.fetch_add(1, Ordering::SeqCst);
-            sockets.insert(handle, SocketWrapper::TcpStream(stream));
-
-            Ok(handle)
-        } else {
-            Err(HalError::NotFound("TCP listener not found".to_string()))
-        }
+        Ok(handle)
     }
 
     /// Create a UDP socket
@@ -158,47 +178,60 @@ impl SocketInterface {
     ) -> HalResult<SocketResult> {
         use tokio::io::AsyncReadExt;
 
-        let mut sockets = self.sockets.write().await;
+        let wrapper = {
+            let mut sockets = self.sockets.write().await;
+            sockets.remove(&handle)
+        };
 
-        match sockets.get_mut(&handle) {
-            Some(SocketWrapper::TcpStream(stream)) => {
-                let bytes_read = stream
-                    .read(buffer)
-                    .await
-                    .map_err(|e| HalError::NetworkError(format!("TCP read failed: {}", e)))?;
+        let Some(wrapper) = wrapper else {
+            return Err(HalError::NotFound(
+                "Socket not found or invalid type".to_string(),
+            ));
+        };
 
+        match wrapper {
+            SocketWrapper::TcpStream(mut stream) => {
+                let read_result = stream.read(buffer).await;
                 let peer_addr = stream.peer_addr().ok();
+                let mut sockets = self.sockets.write().await;
+                sockets.insert(handle, SocketWrapper::TcpStream(stream));
+                let bytes_read = read_result
+                    .map_err(|e| HalError::NetworkError(format!("TCP read failed: {}", e)))?;
                 Ok(SocketResult {
                     bytes_transferred: bytes_read,
                     peer_address: peer_addr,
                 })
             }
-            Some(SocketWrapper::TlsStream(stream)) => {
-                let bytes_read = stream
-                    .read(buffer)
-                    .await
-                    .map_err(|e| HalError::NetworkError(format!("TLS read failed: {}", e)))?;
-
+            SocketWrapper::TlsStream(mut stream) => {
+                let read_result = stream.read(buffer).await;
                 let peer_addr = stream.get_ref().0.peer_addr().ok();
+                let mut sockets = self.sockets.write().await;
+                sockets.insert(handle, SocketWrapper::TlsStream(stream));
+                let bytes_read = read_result
+                    .map_err(|e| HalError::NetworkError(format!("TLS read failed: {}", e)))?;
                 Ok(SocketResult {
                     bytes_transferred: bytes_read,
                     peer_address: peer_addr,
                 })
             }
-            Some(SocketWrapper::UdpSocket(socket)) => {
-                let (bytes_read, peer_addr) = socket
-                    .recv_from(buffer)
-                    .await
+            SocketWrapper::UdpSocket(socket) => {
+                let recv_result = socket.recv_from(buffer).await;
+                let mut sockets = self.sockets.write().await;
+                sockets.insert(handle, SocketWrapper::UdpSocket(socket));
+                let (bytes_read, peer_addr) = recv_result
                     .map_err(|e| HalError::NetworkError(format!("UDP recv failed: {}", e)))?;
-
                 Ok(SocketResult {
                     bytes_transferred: bytes_read,
                     peer_address: Some(peer_addr),
                 })
             }
-            _ => Err(HalError::NotFound(
-                "Socket not found or invalid type".to_string(),
-            )),
+            other => {
+                let mut sockets = self.sockets.write().await;
+                sockets.insert(handle, other);
+                Err(HalError::NotFound(
+                    "Socket not found or invalid type".to_string(),
+                ))
+            }
         }
     }
 
@@ -206,36 +239,49 @@ impl SocketInterface {
     pub async fn socket_write(&self, handle: SocketHandle, data: &[u8]) -> HalResult<SocketResult> {
         use tokio::io::AsyncWriteExt;
 
-        let mut sockets = self.sockets.write().await;
+        let wrapper = {
+            let mut sockets = self.sockets.write().await;
+            sockets.remove(&handle)
+        };
 
-        match sockets.get_mut(&handle) {
-            Some(SocketWrapper::TcpStream(stream)) => {
-                stream
-                    .write_all(data)
-                    .await
-                    .map_err(|e| HalError::NetworkError(format!("TCP write failed: {}", e)))?;
-
-                let peer_addr = stream.peer_addr().ok();
-                Ok(SocketResult {
-                    bytes_transferred: data.len(),
-                    peer_address: peer_addr,
-                })
-            }
-            Some(SocketWrapper::TlsStream(stream)) => {
-                stream
-                    .write_all(data)
-                    .await
-                    .map_err(|e| HalError::NetworkError(format!("TLS write failed: {}", e)))?;
-
-                let peer_addr = stream.get_ref().0.peer_addr().ok();
-                Ok(SocketResult {
-                    bytes_transferred: data.len(),
-                    peer_address: peer_addr,
-                })
-            }
-            _ => Err(HalError::NotFound(
+        let Some(wrapper) = wrapper else {
+            return Err(HalError::NotFound(
                 "Socket not found or invalid type for write".to_string(),
-            )),
+            ));
+        };
+
+        match wrapper {
+            SocketWrapper::TcpStream(mut stream) => {
+                let write_result = stream.write_all(data).await;
+                let peer_addr = stream.peer_addr().ok();
+                let mut sockets = self.sockets.write().await;
+                sockets.insert(handle, SocketWrapper::TcpStream(stream));
+                write_result
+                    .map_err(|e| HalError::NetworkError(format!("TCP write failed: {}", e)))?;
+                Ok(SocketResult {
+                    bytes_transferred: data.len(),
+                    peer_address: peer_addr,
+                })
+            }
+            SocketWrapper::TlsStream(mut stream) => {
+                let write_result = stream.write_all(data).await;
+                let peer_addr = stream.get_ref().0.peer_addr().ok();
+                let mut sockets = self.sockets.write().await;
+                sockets.insert(handle, SocketWrapper::TlsStream(stream));
+                write_result
+                    .map_err(|e| HalError::NetworkError(format!("TLS write failed: {}", e)))?;
+                Ok(SocketResult {
+                    bytes_transferred: data.len(),
+                    peer_address: peer_addr,
+                })
+            }
+            other => {
+                let mut sockets = self.sockets.write().await;
+                sockets.insert(handle, other);
+                Err(HalError::NotFound(
+                    "Socket not found or invalid type for write".to_string(),
+                ))
+            }
         }
     }
 
@@ -254,20 +300,32 @@ impl SocketInterface {
                 HalError::NetworkError("Failed to resolve target address".to_string())
             })?;
 
-        let mut sockets = self.sockets.write().await;
+        let wrapper = {
+            let mut sockets = self.sockets.write().await;
+            sockets.remove(&handle)
+        };
 
-        if let Some(SocketWrapper::UdpSocket(socket)) = sockets.get_mut(&handle) {
-            let bytes_sent = socket
-                .send_to(data, addr)
-                .await
-                .map_err(|e| HalError::NetworkError(format!("UDP send failed: {}", e)))?;
+        let Some(wrapper) = wrapper else {
+            return Err(HalError::NotFound("UDP socket not found".to_string()));
+        };
 
-            Ok(SocketResult {
-                bytes_transferred: bytes_sent,
-                peer_address: Some(addr),
-            })
-        } else {
-            Err(HalError::NotFound("UDP socket not found".to_string()))
+        match wrapper {
+            SocketWrapper::UdpSocket(socket) => {
+                let send_result = socket.send_to(data, addr).await;
+                let mut sockets = self.sockets.write().await;
+                sockets.insert(handle, SocketWrapper::UdpSocket(socket));
+                let bytes_sent = send_result
+                    .map_err(|e| HalError::NetworkError(format!("UDP send failed: {}", e)))?;
+                Ok(SocketResult {
+                    bytes_transferred: bytes_sent,
+                    peer_address: Some(addr),
+                })
+            }
+            other => {
+                let mut sockets = self.sockets.write().await;
+                sockets.insert(handle, other);
+                Err(HalError::NotFound("UDP socket not found".to_string()))
+            }
         }
     }
 
@@ -292,18 +350,20 @@ impl SocketInterface {
         };
 
         // Get TLS client config
-        let tls_config = self.tls_config.read().await;
-        let client_config = if let Some(config_name) = config_name {
-            tls_config
-                .client_configs
-                .get(config_name)
-                .ok_or_else(|| {
-                    HalError::NotFound(format!("TLS client config '{}' not found", config_name))
-                })?
-                .clone()
-        } else {
-            // Create default client config
-            Arc::new(self.create_default_client_config()?)
+        let client_config = {
+            let tls_config = self.tls_config.read().await;
+            if let Some(config_name) = config_name {
+                tls_config
+                    .client_configs
+                    .get(config_name)
+                    .ok_or_else(|| {
+                        HalError::NotFound(format!("TLS client config '{}' not found", config_name))
+                    })?
+                    .clone()
+            } else {
+                // Create default client config
+                Arc::new(self.create_default_client_config()?)
+            }
         };
 
         // Establish TLS connection
